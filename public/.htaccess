@@ -1,0 +1,16 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Statische Dateien direkt ausliefern
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Alles andere an den Front-Controller
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+php_value upload_max_filesize 10M
+php_value post_max_size 12M
