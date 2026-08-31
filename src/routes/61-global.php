@@ -43,4 +43,5 @@ return static function (Router $r): void {
     $r->post('/global-admin/editionen', [EditionsController::class, 'store']);
     $r->post('/global-admin/editionen/{id}', [EditionsController::class, 'update']);
     $r->post('/global-admin/editionen/{id}/status', [EditionsController::class, 'status']);
+    $r->post('/global-admin/editionen/{id}/klonen', [EditionsController::class, 'duplicate']);
 };

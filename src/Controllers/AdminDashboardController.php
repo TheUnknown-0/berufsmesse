@@ -133,6 +133,36 @@ final class AdminDashboardController extends Controller
         $this->redirect($this->ctx->schoolUrl('/admin/dashboard'));
     }
 
+    /**
+     * POST /{school}/admin/zuteilung/simulation
+     *
+     * Probelauf der Zuteilung: rechnet das Ergebnis vollständig durch und
+     * verwirft es wieder (siehe AutoAssign::simulate). Zeigt, wie gut die
+     * Verteilung ausfiele, BEVOR sie scharf geschaltet wird.
+     */
+    public function simulateAssign(array $params): string
+    {
+        $this->requireSchool($params['school']);
+        $this->requirePermission(Permissions::ZUTEILUNG_AUSFUEHREN);
+        $this->requireCsrf();
+        $edition = $this->ctx->requireEdition();
+
+        $withFill = isset($_POST['auffuellen']);
+        $result = $this->autoAssign()->simulate(
+            (int) $edition['id'],
+            (int) $this->ctx->schoolId(),
+            $withFill,
+        );
+
+        // Kein Redirect: Das Ergebnis wird direkt gerendert, damit ein
+        // versehentliches Neuladen keinen zweiten Probelauf auslöst.
+        return $this->render('pages/admin-dashboard/simulation', [
+            'title' => 'Probelauf der Zuteilung',
+            'result' => $result,
+            'withFill' => $withFill,
+        ]);
+    }
+
     /** POST /{school}/admin/zuteilung/zuruecksetzen */
     public function resetAssign(array $params): string
     {

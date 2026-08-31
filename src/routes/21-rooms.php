@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Controllers\CapacitiesController;
 use App\Controllers\EquipmentAdminController;
+use App\Controllers\RoomPlanController;
 use App\Controllers\RoomsController;
 use App\Core\Router;
 
@@ -14,6 +15,8 @@ use App\Core\Router;
 return static function (Router $r): void {
     // ---------- Räume ----------
     $r->get('/{school}/admin/raeume', [RoomsController::class, 'index']);
+    $r->get('/{school}/admin/raumplan', [RoomPlanController::class, 'index']);
+    $r->post('/{school}/api/raumplan/zuteilen', [RoomPlanController::class, 'apiAssign']);
     $r->post('/{school}/admin/raeume/neu', [RoomsController::class, 'store']);
     $r->post('/{school}/admin/raeume/zuteilen', [RoomsController::class, 'assign']);
     $r->post('/{school}/admin/raeume/zuteilung-loesen', [RoomsController::class, 'unassign']);

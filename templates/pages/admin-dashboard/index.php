@@ -82,6 +82,10 @@ $quote = static fn (int $part, int $total): int => $total > 0 ? (int) round($par
             </p>
             <div class="cluster">
                 <?php if ($canAssign): ?>
+                    <form method="post" action="<?= e($ctx->schoolUrl('/admin/zuteilung/simulation')) ?>">
+                        <?= $csrf->field() ?>
+                        <button class="btn btn-accent" type="submit">🔍 Probelauf (ändert nichts)</button>
+                    </form>
                     <form method="post" action="<?= e($ctx->schoolUrl('/admin/zuteilung/ausfuehren')) ?>"
                           data-confirm="Phase 1 der automatischen Zuteilung jetzt starten?">
                         <?= $csrf->field() ?>

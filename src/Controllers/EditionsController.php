@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\HttpException;
+use App\Services\EditionCloner;
 
 /**
  * Messe-Editionen im Global-Admin (/global-admin/editionen).
@@ -122,6 +123,103 @@ final class EditionsController extends Controller
             $schoolId,
         );
         $this->flash('success', 'Edition angelegt (ID ' . $newId . ').');
+        $this->redirect($back);
+    }
+
+    /**
+     * POST /global-admin/editionen/{id}/klonen
+     *
+     * Legt eine neue Edition an und übernimmt die Struktur der gewählten
+     * Quell-Edition (Zeitraster, Räume, Aussteller …). Durchführungsdaten
+     * — Anmeldungen, Anwesenheiten, Feedback-Antworten — bleiben außen vor;
+     * die Details stehen in Services\EditionCloner.
+     */
+    public function duplicate(array $params): string
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $back = $this->ctx->url('/global-admin/editionen');
+
+        $source = $this->ctx->db->fetchOne(
+            'SELECT * FROM messe_editions WHERE id = ?',
+            [(int) $params['id']],
+        );
+        if ($source === null) {
+            throw new HttpException(404, 'Diese Edition existiert nicht.');
+        }
+        $schoolId = (int) $source['school_id'];
+
+        $name = trim((string) ($_POST['name'] ?? ''));
+        $year = (int) ($_POST['year'] ?? 0);
+        if ($name === '') {
+            $this->flash('error', 'Bitte gib eine Bezeichnung für die neue Edition an.');
+            $this->redirect($back);
+        }
+        if ($year < 2000 || $year > 2100) {
+            $this->flash('error', 'Bitte gib ein gültiges Jahr zwischen 2000 und 2100 an.');
+            $this->redirect($back);
+        }
+
+        $parts = [];
+        foreach (array_keys(EditionCloner::PARTS) as $key) {
+            if (isset($_POST['parts'][$key])) {
+                $parts[] = $key;
+            }
+        }
+        // Zugänge und Orga-Zuordnungen hängen an den Ausstellern.
+        if (!in_array('exhibitors', $parts, true)) {
+            $parts = array_values(array_diff($parts, ['exhibitor_users', 'orga_team']));
+        }
+
+        [$newId, $stats] = $this->ctx->db->transaction(
+            function () use ($schoolId, $name, $year, $source, $parts): array {
+                $this->ctx->db->run(
+                    "INSERT INTO messe_editions
+                        (school_id, name, year, status, max_registrations_per_student)
+                     VALUES (?, ?, ?, 'draft', ?)",
+                    [$schoolId, mb_substr($name, 0, 200), $year, (int) $source['max_registrations_per_student']],
+                );
+                $editionId = $this->ctx->db->lastInsertId();
+
+                $cloner = new EditionCloner($this->ctx->db);
+
+                return [$editionId, $cloner->copy((int) $source['id'], $editionId, $parts)];
+            },
+        );
+
+        $summary = [];
+        foreach ($stats as $key => $count) {
+            $summary[] = $count . ' ' . (EditionCloner::PARTS[$key] ?? $key);
+        }
+
+        $this->ctx->audit->log(
+            'Messe-Edition geklont',
+            'info',
+            sprintf(
+                '„%s“ (#%d) → „%s“ (#%d, %d): %s',
+                (string) $source['name'],
+                (int) $source['id'],
+                $name,
+                $newId,
+                $year,
+                $summary === [] ? 'nur Rahmendaten' : implode(', ', $summary),
+            ),
+            $schoolId,
+        );
+        $this->flash(
+            'success',
+            sprintf(
+                'Edition „%s“ angelegt (Entwurf). Übernommen: %s.',
+                $name,
+                $summary === [] ? 'nichts — nur die Rahmendaten' : implode(', ', $summary),
+            ),
+        );
+        if (in_array('exhibitors', $parts, true)) {
+            $this->flash(
+                'info',
+                'Die übernommenen Aussteller stehen auf „Lead“ und sind noch nicht sichtbar — bestätige sie in der Aussteller-Pipeline, sobald sie zugesagt haben.',
+            );
+        }
         $this->redirect($back);
     }
 

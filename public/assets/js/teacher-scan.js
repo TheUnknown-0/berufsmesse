@@ -142,7 +142,27 @@
             }
         }).catch(function () {
             busy = false;
+
+            // Kein Netz: Scan puffern statt verwerfen (siehe scan-queue.js).
+            if (window.BMQueue) {
+                window.BMQueue.push(checkinUrl, payload);
+                show('warning', 'Offline — der Scan ist gespeichert und wird nachgetragen.');
+                if (input) { input.value = ''; }
+                return;
+            }
             show('error', 'Keine Verbindung zum Server. Bitte erneut versuchen.');
+        });
+    }
+
+    // Anzeige der wartenden Scans
+    if (window.BMQueue) {
+        var queueBadge = document.querySelector('[data-scan-queue]');
+        window.BMQueue.onChange(function (count) {
+            if (!queueBadge) { return; }
+            queueBadge.hidden = count === 0;
+            queueBadge.textContent = count === 1
+                ? '1 Scan wartet auf Übertragung'
+                : count + ' Scans warten auf Übertragung';
         });
     }
 

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Controllers\ExhibitorDocumentsController;
+use App\Controllers\ExhibitorPipelineController;
 use App\Controllers\ExhibitorsAdminController;
 use App\Controllers\ExhibitorsController;
 use App\Core\Router;
@@ -22,6 +23,12 @@ return static function (Router $r): void {
     $r->get('/{school}/admin/aussteller', [ExhibitorsAdminController::class, 'index']);
     $r->get('/{school}/admin/aussteller/neu', [ExhibitorsAdminController::class, 'create']);
     $r->post('/{school}/admin/aussteller/neu', [ExhibitorsAdminController::class, 'store']);
+
+    // Akquise-Pipeline — steht vor den {id}-Routen, damit „pipeline“ nicht als ID gelesen wird.
+    $r->get('/{school}/admin/aussteller/pipeline', [ExhibitorPipelineController::class, 'index']);
+    $r->post('/{school}/admin/aussteller/{id}/pipeline', [ExhibitorPipelineController::class, 'updateStage']);
+    $r->post('/{school}/admin/aussteller/{id}/notiz', [ExhibitorPipelineController::class, 'addNote']);
+    $r->post('/{school}/admin/notiz/{id}/loeschen', [ExhibitorPipelineController::class, 'deleteNote']);
     $r->get('/{school}/admin/aussteller/{id}', [ExhibitorsAdminController::class, 'edit']);
     $r->post('/{school}/admin/aussteller/{id}', [ExhibitorsAdminController::class, 'update']);
     $r->post('/{school}/admin/aussteller/{id}/loeschen', [ExhibitorsAdminController::class, 'destroy']);

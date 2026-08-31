@@ -29,6 +29,7 @@ $studentUrl = static fn (int $id): string => $ctx->schoolUrl('/admin/anmeldungen
     'schuelerliste' => 'Schüler:innen-Liste',
     'anmeldungen' => 'Anmeldungen der gewählten Person',
     'anmeldung-hinzufuegen' => 'Anmeldung hinzufügen',
+    'warteliste' => 'Warteliste',
 ]); ?>
 <?php foreach ($registrationBlocks as $blockKey => $blockLabel): ?>
 <?= block_open($blockKey, $blockLabel) ?>
@@ -253,6 +254,51 @@ $studentUrl = static fn (int $id): string => $ctx->schoolUrl('/admin/anmeldungen
             </div>
         </div>
     <?php endif; ?>
+<?php elseif ($blockKey === 'warteliste'): ?>
+    <div class="card">
+        <div class="card-header">
+            <h2 class="mt-0 mb-0">Warteliste</h2>
+        </div>
+        <div class="card-body">
+            <?php if ($waitlist === []): ?>
+                <p class="text-faint mb-0">
+                    Niemand wartet — jeder Wunsch hat einen Platz bekommen.
+                </p>
+            <?php else: ?>
+                <p class="text-sm text-soft">
+                    Wünsche ohne Zuteilung. Wird bei einem dieser Aussteller ein Platz frei — durch
+                    Abmeldung oder Entfernen einer Anmeldung —, rückt automatisch die Person mit der
+                    höchsten Priorität und dem ältesten Wunsch nach und wird in der App benachrichtigt.
+                </p>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>Aussteller</th>
+                            <th>wartend</th>
+                            <th>davon Erstwünsche</th>
+                            <th>ältester Wunsch</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($waitlist as $row): ?>
+                            <tr>
+                                <td>
+                                    <a href="<?= e($ctx->schoolUrl('/admin/aussteller/' . (int) $row['id'])) ?>">
+                                        <?= e($row['name']) ?>
+                                    </a>
+                                </td>
+                                <td><strong><?= e((string) $row['wartend']) ?></strong></td>
+                                <td><?= e((string) (int) $row['erstwuensche']) ?></td>
+                                <td class="text-sm text-soft"><?= e(format_datetime($row['aeltester'])) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
 <?php endif; ?>
 <?= block_close() ?>
 <?php endforeach; ?>

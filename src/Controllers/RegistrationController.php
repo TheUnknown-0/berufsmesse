@@ -6,6 +6,9 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\Capacity;
+use App\Services\Notifications;
+use App\Services\Waitlist;
 use DateTimeImmutable;
 
 /**
@@ -252,10 +255,27 @@ final class RegistrationController extends Controller
             $this->redirect($back);
         }
 
+        $freedSlot = $row['timeslot_id'] !== null ? (int) $row['timeslot_id'] : null;
+
         $this->ctx->db->run(
             'DELETE FROM registrations WHERE id = ? AND user_id = ? AND edition_id = ?',
             [$registrationId, (int) $user['id'], (int) $edition['id']],
         );
+
+        // War der Platz zugeteilt, rückt die/der nächste Wartende nach.
+        if ($freedSlot !== null) {
+            (new Waitlist(
+                $this->ctx->db,
+                new Capacity($this->ctx->db),
+                new Notifications($this->ctx->db),
+            ))->promote(
+                (int) $edition['id'],
+                (int) $row['exhibitor_id'],
+                $freedSlot,
+                $this->ctx->schoolId(),
+            );
+        }
+
         $this->ctx->audit->log(
             'Anmeldung abgemeldet',
             'info',

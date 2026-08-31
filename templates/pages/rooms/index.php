@@ -23,6 +23,7 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
         <p class="page-sub">Raumdaten pflegen und Aussteller den Räumen zuordnen.</p>
     </div>
     <div class="page-actions">
+        <a class="btn" href="<?= e($ctx->schoolUrl('/admin/raumplan')) ?>">🗺️ Raumplanung</a>
         <?php if ($can(P::RAEUME_ERSTELLEN)): ?>
             <button class="btn btn-primary" type="button" data-open-modal="room-new">➕ Neuer Raum</button>
         <?php endif; ?>

@@ -16,6 +16,7 @@ $can = static fn (string $p): bool => $auth->can($p, $schoolId);
         <p class="page-sub">Unternehmen, Branchen, Profilfelder und Dokumente der aktuellen Messe.</p>
     </div>
     <div class="page-actions">
+        <a class="btn" href="<?= e($ctx->schoolUrl('/admin/aussteller/pipeline')) ?>">📋 Pipeline</a>
         <?php if ($can(P::AUSSTELLER_KONTEN_VERWALTEN)): ?>
             <a class="btn" href="<?= e($ctx->schoolUrl('/admin/aussteller-konten')) ?>">👤 Aussteller-Konten</a>
         <?php endif; ?>

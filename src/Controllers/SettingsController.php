@@ -244,6 +244,141 @@ final class SettingsController extends Controller
     }
 
     /** POST /{school}/admin/einstellungen/zeitslots/loeschen */
+    /**
+     * POST /{school}/admin/einstellungen/zeitslots/assistent
+     *
+     * Erzeugt das komplette Zeitraster aus Startzeit, Slotdauer, Wechselzeit
+     * und Pausen — statt jeden Slot einzeln anzulegen. Bestehende Slots
+     * werden auf Wunsch ersetzt; das ist gesperrt, sobald Zuteilungen oder
+     * Anwesenheiten daran hängen.
+     */
+    public function generateTimeslots(array $params): string
+    {
+        $edition = $this->beginWrite($params);
+        $editionId = (int) $edition['id'];
+        $back = $this->tabUrl('zeitslots');
+
+        $start = $this->parseTime($_POST['start'] ?? '', 'Startzeit', $back);
+        if ($start === null) {
+            $this->flash('error', 'Bitte gib eine Startzeit an.');
+            $this->redirect($back);
+        }
+
+        $count = (int) ($_POST['count'] ?? 0);
+        $duration = (int) ($_POST['duration'] ?? 0);
+        $gap = max(0, (int) ($_POST['gap'] ?? 0));
+        $replace = isset($_POST['replace']);
+
+        if ($count < 1 || $count > 20) {
+            $this->flash('error', 'Die Anzahl der Slots muss zwischen 1 und 20 liegen.');
+            $this->redirect($back);
+        }
+        if ($duration < 5 || $duration > 240) {
+            $this->flash('error', 'Die Slotdauer muss zwischen 5 und 240 Minuten liegen.');
+            $this->redirect($back);
+        }
+
+        // Pause nach Slot N mit eigener Dauer (0 = keine Pause)
+        $breakAfter = (int) ($_POST['break_after'] ?? 0);
+        $breakMinutes = (int) ($_POST['break_minutes'] ?? 0);
+        if ($breakAfter > 0 && ($breakMinutes < 5 || $breakMinutes > 120)) {
+            $this->flash('error', 'Die Pausendauer muss zwischen 5 und 120 Minuten liegen.');
+            $this->redirect($back);
+        }
+        if ($breakAfter >= $count) {
+            // Eine Pause hinter dem letzten Slot ergibt keinen Sinn
+            $breakAfter = 0;
+        }
+
+        // Slot-Nummern, die freie Wahl sind (is_managed = 0)
+        $freeSlots = [];
+        foreach (preg_split('/[\s,;]+/', (string) ($_POST['free_slots'] ?? '')) ?: [] as $piece) {
+            if ($piece !== '' && ctype_digit($piece)) {
+                $freeSlots[] = (int) $piece;
+            }
+        }
+
+        $existing = $this->ctx->db->fetchAll(
+            'SELECT id FROM timeslots WHERE edition_id = ?',
+            [$editionId],
+        );
+        if ($existing !== [] && !$replace) {
+            $this->flash('error', 'Für diese Edition gibt es bereits Zeitslots. Setze das Häkchen „Bestehendes Raster ersetzen“, wenn du sie überschreiben willst.');
+            $this->redirect($back);
+        }
+        if ($existing !== []) {
+            $used = (int) $this->ctx->db->fetchValue(
+                'SELECT (SELECT COUNT(*) FROM registrations WHERE edition_id = ? AND timeslot_id IS NOT NULL)
+                      + (SELECT COUNT(*) FROM attendance WHERE edition_id = ?)',
+                [$editionId, $editionId],
+            );
+            if ($used > 0) {
+                $this->flash('error', 'Das Raster lässt sich nicht ersetzen: Es hängen bereits Zuteilungen oder Anwesenheiten daran. Setze zuerst die Zuteilung zurück.');
+                $this->redirect($back);
+            }
+        }
+
+        // Raster berechnen: Slots der Reihe nach, Pause als eigener Eintrag.
+        $rows = [];
+        $cursor = new DateTimeImmutable('2000-01-01 ' . $start);
+        $number = 1;
+        for ($i = 1; $i <= $count; $i++) {
+            $end = $cursor->modify('+' . $duration . ' minutes');
+            $rows[] = [
+                'number' => $number++,
+                'name' => 'Slot ' . $i,
+                'start' => $cursor->format('H:i:s'),
+                'end' => $end->format('H:i:s'),
+                'managed' => in_array($i, $freeSlots, true) ? 0 : 1,
+                'break' => 0,
+            ];
+            $cursor = $end;
+
+            if ($breakAfter > 0 && $i === $breakAfter) {
+                $breakEnd = $cursor->modify('+' . $breakMinutes . ' minutes');
+                $rows[] = [
+                    'number' => $number++,
+                    'name' => 'Pause',
+                    'start' => $cursor->format('H:i:s'),
+                    'end' => $breakEnd->format('H:i:s'),
+                    'managed' => 0,
+                    'break' => 1,
+                ];
+                $cursor = $breakEnd;
+            } elseif ($i < $count && $gap > 0) {
+                $cursor = $cursor->modify('+' . $gap . ' minutes');
+            }
+        }
+
+        $this->ctx->db->transaction(function () use ($editionId, $rows): void {
+            $this->ctx->db->run('DELETE FROM timeslots WHERE edition_id = ?', [$editionId]);
+            foreach ($rows as $row) {
+                $this->ctx->db->run(
+                    'INSERT INTO timeslots (edition_id, slot_number, slot_name, start_time, end_time, is_managed, is_break)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [$editionId, $row['number'], $row['name'], $row['start'], $row['end'], $row['managed'], $row['break']],
+                );
+            }
+        });
+
+        $this->ctx->audit->log(
+            'Zeitraster erzeugt',
+            'warning',
+            sprintf(
+                '%d Einträge: %d Slots à %d Min ab %s%s%s',
+                count($rows),
+                $count,
+                $duration,
+                substr($start, 0, 5),
+                $breakAfter > 0 ? sprintf(', Pause nach Slot %d (%d Min)', $breakAfter, $breakMinutes) : '',
+                $freeSlots !== [] ? ', freie Wahl: ' . implode(', ', $freeSlots) : '',
+            ),
+            $this->ctx->schoolId(),
+        );
+        $this->flash('success', sprintf('Zeitraster erzeugt: %d Einträge angelegt.', count($rows)));
+        $this->redirect($back);
+    }
+
     public function deleteTimeslot(array $params): string
     {
         $edition = $this->beginWrite($params);

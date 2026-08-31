@@ -10,6 +10,7 @@
         <div class="page-eyebrow">Aufsicht</div>
         <h1 class="page-title">Scanner</h1>
         <p class="page-sub">Persönliche QR-Codes der Schüler:innen scannen und die Anwesenheit im Raum erfassen.</p>
+        <div class="alert alert-warning" data-scan-queue hidden role="status"></div>
     </div>
 </div>
 

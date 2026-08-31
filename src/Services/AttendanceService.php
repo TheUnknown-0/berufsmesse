@@ -160,6 +160,11 @@ final class AttendanceService
     /**
      * Trägt eine Anwesenheit ein (UNIQUE user+exhibitor+slot).
      *
+     * $recordedAt setzt den Erfassungszeitpunkt abweichend von „jetzt“ —
+     * gedacht für Scans, die offline gepuffert und später nachgetragen
+     * wurden. Der Wert muss vom Aufrufer geprüft sein (siehe
+     * Controller::offlineTimestamp), da er vom Gerät stammt.
+     *
      * @return bool true = neu eingetragen, false = war bereits vorhanden.
      */
     public function recordCheckin(
@@ -172,16 +177,25 @@ final class AttendanceService
         ?int $checkedInBy = null,
         ?int $actualRoomId = null,
         bool $wrongRoom = false,
+        ?string $recordedAt = null,
     ): bool {
+        $columns = 'edition_id, user_id, exhibitor_id, timeslot_id, qr_token,
+                    checkin_method, checked_in_by, actual_room_id, wrong_room';
+        $values = '?, ?, ?, ?, ?, ?, ?, ?, ?';
+        $args = [
+            $editionId, $userId, $exhibitorId, $timeslotId, $qrToken,
+            $method, $checkedInBy, $actualRoomId, $wrongRoom ? 1 : 0,
+        ];
+
+        if ($recordedAt !== null) {
+            $columns .= ', checked_in_at';
+            $values .= ', ?';
+            $args[] = $recordedAt;
+        }
+
         $stmt = $this->db->run(
-            'INSERT IGNORE INTO attendance
-                (edition_id, user_id, exhibitor_id, timeslot_id, qr_token,
-                 checkin_method, checked_in_by, actual_room_id, wrong_room)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-                $editionId, $userId, $exhibitorId, $timeslotId, $qrToken,
-                $method, $checkedInBy, $actualRoomId, $wrongRoom ? 1 : 0,
-            ],
+            "INSERT IGNORE INTO attendance ({$columns}) VALUES ({$values})",
+            $args,
         );
 
         return $stmt->rowCount() > 0;

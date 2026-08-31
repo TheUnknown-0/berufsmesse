@@ -6,6 +6,7 @@ use App\Controllers\AdminDashboardController;
 use App\Controllers\AdminRegistrationsController;
 use App\Controllers\SettingsController;
 use App\Controllers\TeacherController;
+use App\Controllers\YearComparisonController;
 use App\Core\Router;
 
 /**
@@ -18,6 +19,11 @@ return static function (Router $r): void {
     $r->get('/{school}/api/dashboard/stats', [AdminDashboardController::class, 'apiStats']);
     $r->post('/{school}/admin/zuteilung/ausfuehren', [AdminDashboardController::class, 'runAssign']);
     $r->post('/{school}/admin/zuteilung/auffuellen', [AdminDashboardController::class, 'runFill']);
+    $r->post('/{school}/admin/zuteilung/simulation', [AdminDashboardController::class, 'simulateAssign']);
+
+    // Jahresvergleich über alle Editionen
+    $r->get('/{school}/admin/jahresvergleich', [YearComparisonController::class, 'index']);
+    $r->get('/{school}/admin/jahresvergleich/export', [YearComparisonController::class, 'export']);
     $r->post('/{school}/admin/zuteilung/zuruecksetzen', [AdminDashboardController::class, 'resetAssign']);
 
     // Anmeldungen verwalten
@@ -30,6 +36,7 @@ return static function (Router $r): void {
     $r->get('/{school}/admin/einstellungen', [SettingsController::class, 'index']);
     $r->post('/{school}/admin/einstellungen/messe', [SettingsController::class, 'saveEdition']);
     $r->post('/{school}/admin/einstellungen/zeitslots', [SettingsController::class, 'saveTimeslot']);
+    $r->post('/{school}/admin/einstellungen/zeitslots/assistent', [SettingsController::class, 'generateTimeslots']);
     $r->post('/{school}/admin/einstellungen/zeitslots/loeschen', [SettingsController::class, 'deleteTimeslot']);
     $r->post('/{school}/admin/einstellungen/zugang', [SettingsController::class, 'saveAccess']);
     $r->post('/{school}/admin/einstellungen/qr', [SettingsController::class, 'saveQr']);

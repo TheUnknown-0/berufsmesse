@@ -17,6 +17,7 @@ use App\Core\Database;
  * Phase 2 (fillIncomplete): füllt Schüler mit Lücken automatisch mit
  *   Ausstellern auf, die im jeweiligen Slot noch Kapazität haben.
  * reset(): stellt den Zustand vor der Zuteilung wieder her.
+ * simulate(): führt beide Phasen probeweise aus und rollt zurück.
  */
 final class AutoAssign
 {
@@ -240,6 +241,160 @@ final class AutoAssign
 
             return $stats;
         });
+    }
+
+    /**
+     * Probelauf: führt die Zuteilung wirklich aus, misst das Ergebnis und
+     * macht anschließend ALLES rückgängig.
+     *
+     * So misst die Vorschau exakt das, was auch passieren würde — statt die
+     * Verteilungslogik ein zweites Mal nachzubauen, die dann auseinanderdriftet.
+     * Der Rollback steht in `finally`; die Methode committet unter keinen
+     * Umständen.
+     *
+     * @return array{before: array<string, mixed>, after: array<string, mixed>,
+     *               phase1: array<string, int>, phase2: array<string, int>|null,
+     *               unfulfilled: list<array<string, mixed>>}
+     */
+    public function simulate(int $editionId, int $schoolId, bool $withFill): array
+    {
+        $pdo = $this->db->pdo();
+        if ($pdo->inTransaction()) {
+            throw new \RuntimeException('Der Probelauf braucht eine eigene Transaktion.');
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $before = $this->quality($editionId, $schoolId);
+            $phase1 = $this->assignPending($editionId);
+            $phase2 = $withFill ? $this->fillIncomplete($editionId, $schoolId) : null;
+            $after = $this->quality($editionId, $schoolId);
+            $unfulfilled = $this->unfulfilledWishes($editionId);
+
+            return [
+                'before' => $before,
+                'after' => $after,
+                'phase1' => $phase1,
+                'phase2' => $phase2,
+                'unfulfilled' => $unfulfilled,
+            ];
+        } finally {
+            // Nichts von alledem darf bestehen bleiben.
+            $pdo->rollBack();
+            $this->capacity->refresh($editionId);
+        }
+    }
+
+    /**
+     * Kennzahlen zur Güte der Verteilung.
+     *
+     * @return array{students: int, wishes: int, assigned: int, open: int,
+     *               by_priority: array<int, array{total: int, assigned: int}>,
+     *               full_plans: int, partial_plans: int, empty_plans: int,
+     *               free_seats: int, slots: int}
+     */
+    public function quality(int $editionId, int $schoolId): array
+    {
+        $managed = $this->managedSlotIds($editionId);
+        $slotCount = count($managed);
+
+        $totals = $this->db->fetchOne(
+            'SELECT COUNT(*) AS wishes,
+                    SUM(timeslot_id IS NOT NULL) AS assigned
+             FROM registrations WHERE edition_id = ?',
+            [$editionId],
+        ) ?? ['wishes' => 0, 'assigned' => 0];
+
+        // Erfüllungsgrad je Wunsch-Priorität (1 = Erstwunsch)
+        $byPriority = [];
+        foreach ($this->db->fetchAll(
+            'SELECT priority, COUNT(*) AS total, SUM(timeslot_id IS NOT NULL) AS assigned
+             FROM registrations
+             WHERE edition_id = ? AND priority IS NOT NULL
+             GROUP BY priority ORDER BY priority',
+            [$editionId],
+        ) as $row) {
+            $byPriority[(int) $row['priority']] = [
+                'total' => (int) $row['total'],
+                'assigned' => (int) $row['assigned'],
+            ];
+        }
+
+        // Wie voll ist der Tagesplan der Schüler:innen?
+        $students = (int) $this->db->fetchValue(
+            "SELECT COUNT(*) FROM users WHERE role = 'student' AND school_id = ? AND edition_id = ?",
+            [$schoolId, $editionId],
+        );
+        $full = 0;
+        $partial = 0;
+        if ($slotCount > 0) {
+            $counts = $this->db->fetchAll(
+                "SELECT u.id, COUNT(r.id) AS belegt
+                 FROM users u
+                 LEFT JOIN registrations r ON r.user_id = u.id AND r.edition_id = ? AND r.timeslot_id IS NOT NULL
+                 WHERE u.role = 'student' AND u.school_id = ? AND u.edition_id = ?
+                 GROUP BY u.id",
+                [$editionId, $schoolId, $editionId],
+            );
+            foreach ($counts as $row) {
+                $belegt = (int) $row['belegt'];
+                if ($belegt >= $slotCount) {
+                    $full++;
+                } elseif ($belegt > 0) {
+                    $partial++;
+                }
+            }
+        }
+
+        // Ungenutzte Plätze über alle Aussteller × feste Slots
+        $freeSeats = 0;
+        $this->capacity->refresh($editionId);
+        $exhibitors = array_map(
+            static fn (array $row): int => (int) $row['id'],
+            $this->db->fetchAll(
+                'SELECT id FROM exhibitors WHERE edition_id = ? AND active = 1',
+                [$editionId],
+            ),
+        );
+        foreach ($exhibitors as $exhibitorId) {
+            foreach ($managed as $slotId) {
+                $freeSeats += max(0, $this->capacity->free($editionId, $exhibitorId, $slotId));
+            }
+        }
+
+        return [
+            'students' => $students,
+            'wishes' => (int) $totals['wishes'],
+            'assigned' => (int) ($totals['assigned'] ?? 0),
+            'open' => (int) $totals['wishes'] - (int) ($totals['assigned'] ?? 0),
+            'by_priority' => $byPriority,
+            'full_plans' => $full,
+            'partial_plans' => $partial,
+            'empty_plans' => max(0, $students - $full - $partial),
+            'free_seats' => $freeSeats,
+            'slots' => $slotCount,
+        ];
+    }
+
+    /**
+     * Wünsche, die auch nach der Zuteilung offen bleiben — gruppiert nach
+     * Aussteller, damit sichtbar wird, wo die Kapazität nicht reicht.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function unfulfilledWishes(int $editionId): array
+    {
+        return $this->db->fetchAll(
+            'SELECT e.id, e.name, COUNT(*) AS offen,
+                    SUM(r.priority = 1) AS erstwuensche
+             FROM registrations r
+             JOIN exhibitors e ON e.id = r.exhibitor_id
+             WHERE r.edition_id = ? AND r.timeslot_id IS NULL
+             GROUP BY e.id, e.name
+             ORDER BY offen DESC, e.name
+             LIMIT 25',
+            [$editionId],
+        );
     }
 
     /**

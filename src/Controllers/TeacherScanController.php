@@ -75,7 +75,7 @@ final class TeacherScanController extends Controller
             'assignments' => $assignments,
             'selectedRoomId' => $selectedRoomId,
             'selectedSlotId' => $currentSlotId,
-            'pageScripts' => ['vendor/jsqr.min.js', 'qr-camera.js', 'teacher-scan.js'],
+            'pageScripts' => ['vendor/jsqr.min.js', 'qr-camera.js', 'scan-queue.js', 'teacher-scan.js'],
         ]);
     }
 
@@ -239,6 +239,9 @@ final class TeacherScanController extends Controller
             }
         }
 
+        // Nachgetragene Offline-Scans behalten ihren echten Erfassungszeitpunkt.
+        $recordedAt = $this->offlineTimestamp($input['offline_recorded_at'] ?? null);
+
         $attendance->recordCheckin(
             $editionId,
             $studentId,
@@ -249,6 +252,7 @@ final class TeacherScanController extends Controller
             $teacherId,
             $roomId,
             $wrongRoom,
+            $recordedAt,
         );
         $qr->recordAttempt($teacherId, $ip, true);
 

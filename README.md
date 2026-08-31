@@ -6,14 +6,15 @@ Webanwendung zur Organisation und Durchführung schulischer Berufsmessen — Neu
 
 | Bereich | Funktion |
 |---|---|
-| **Schulen & Editionen** | Mehrere Schulen mit eigenen URLs (`/schul-slug/`), Messe-Jahrgänge mit Einschreibezeitraum & Veranstaltungsdatum |
-| **Aussteller** | CRUD, Logo & Dokumente, Branchen, Angebotstypen, Sichtbarkeitssteuerung, Aussteller-Portal mit eigenen Logins |
-| **Einschreibung** | Schüler wählen Aussteller mit Priorität 1–3, automatische 2-Phasen-Slot-Zuteilung |
-| **QR-Check-in** | Selbst-Scan (Aussteller-Codes) & Lehrer-Scan (Schüler-Codes), Zeitfenster, Falsch-Raum-Erkennung, Live-Dashboard |
+| **Schulen & Editionen** | Mehrere Schulen mit eigenen URLs (`/schul-slug/`), Messe-Jahrgänge mit Einschreibezeitraum & Veranstaltungsdatum, Klonen des Vorjahres, Zeitraster-Assistent |
+| **Aussteller** | CRUD, Logo & Dokumente, Branchen, Angebotstypen, Sichtbarkeitssteuerung, Aussteller-Portal mit eigenen Logins, Akquise-Pipeline mit Gesprächsverlauf und Jahreshistorie |
+| **Einschreibung** | Schüler wählen Aussteller mit Priorität 1–3, automatische 2-Phasen-Slot-Zuteilung, Probelauf vor dem Scharfschalten, Warteliste mit automatischem Nachrücken |
+| **QR-Check-in** | Selbst-Scan (Aussteller-Codes) & Lehrer-Scan (Schüler-Codes), Zeitfenster, Falsch-Raum-Erkennung, Live-Dashboard, offline-fähiger Scanner mit Nachtrag |
 | **Feedback** | Bögen à la Google Forms (7 Fragetypen), Zielgruppen Schüler/Lehrkräfte/Aussteller, Freischaltung per Status + Zeitfenster, anonym oder namentlich, Auswertung & Export |
+| **Messetag** | Leitstand mit Live-Kennzahlen, Ausfall-Management mit automatischer Umbuchung, visuelle Raumplanung per Drag & Drop |
 | **Berichte** | PDF: persönliche Pläne, Klassenlisten, Raumpläne, Zugangsdaten, QR-Karten; Export CSV/XLSX |
 | **Rechte** | Rollen (admin, school_admin, orga, teacher, student, exhibitor) + ~45 granulare Berechtigungen mit Abhängigkeitslogik & Gruppen; globale Administratoren nur im Global-Admin verwaltbar |
-| **Betrieb** | Audit-Log, Ankündigungen, In-App-Benachrichtigungen, Aufsichtsplan, Ausstattungsanfragen |
+| **Betrieb** | Audit-Log, Ankündigungen, In-App-Benachrichtigungen, Aufsichtsplan, Ausstattungsanfragen, Jahresvergleich über alle Editionen |
 
 ## Schnellstart (Docker)
 

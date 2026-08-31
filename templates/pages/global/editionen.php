@@ -3,6 +3,9 @@
  * Global-Admin — Messe-Editionen je Schule.
  * Erwartet: $schools, $editionsBySchool, $statuses, $old.
  */
+
+use App\Services\EditionCloner;
+
 $statusLabels = ['draft' => 'Entwurf', 'active' => 'Aktiv', 'archived' => 'Archiviert'];
 $statusBadges = ['draft' => 'badge-warning', 'active' => 'badge-success', 'archived' => 'badge-info'];
 ?>
@@ -69,6 +72,8 @@ $statusBadges = ['draft' => 'badge-warning', 'active' => 'badge-success', 'archi
                                     <div class="row-actions">
                                         <button class="btn btn-sm btn-ghost" type="button"
                                                 data-open-modal="edition-<?= e((string) $edition['id']) ?>">Bearbeiten</button>
+                                        <button class="btn btn-sm btn-accent" type="button"
+                                                data-open-modal="klon-<?= e((string) $edition['id']) ?>">⧉ Klonen</button>
                                         <form method="post"
                                               action="<?= e($ctx->url('/global-admin/editionen/' . (int) $edition['id'] . '/status')) ?>">
                                             <?= $csrf->field() ?>
@@ -194,6 +199,61 @@ $statusBadges = ['draft' => 'badge-warning', 'active' => 'badge-success', 'archi
                 <div class="modal-footer">
                     <button class="btn btn-ghost" type="button" data-close-modal>Abbrechen</button>
                     <button class="btn btn-primary" type="submit">Speichern</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="modal" id="klon-<?= e((string) $eid) ?>">
+            <form method="post" action="<?= e($ctx->url('/global-admin/editionen/' . $eid . '/klonen')) ?>">
+                <?= $csrf->field() ?>
+                <div class="modal-header">
+                    <h3>Edition klonen</h3>
+                    <button class="modal-close" type="button" data-close-modal aria-label="Schließen">×</button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-sm text-soft">
+                        Vorlage: <strong><?= e($edition['name']) ?></strong> (<?= e((string) $edition['year']) ?>).
+                        Die neue Edition entsteht als <strong>Entwurf</strong>.
+                    </p>
+
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="k-name-<?= e((string) $eid) ?>">Bezeichnung</label>
+                            <input class="input" type="text" id="k-name-<?= e((string) $eid) ?>" name="name"
+                                   required maxlength="200"
+                                   value="Berufsmesse <?= e((string) ((int) $edition['year'] + 1)) ?>">
+                        </div>
+                        <div class="field">
+                            <label for="k-year-<?= e((string) $eid) ?>">Jahr</label>
+                            <input class="input" type="number" id="k-year-<?= e((string) $eid) ?>" name="year"
+                                   required min="2000" max="2100" value="<?= e((string) ((int) $edition['year'] + 1)) ?>">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>Was soll übernommen werden?</label>
+                        <?php foreach (EditionCloner::PARTS as $partKey => $partLabel): ?>
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="parts[<?= e($partKey) ?>]" value="1"
+                                       <?= in_array($partKey, ['timeslots', 'rooms', 'exhibitors'], true) ? 'checked' : '' ?>>
+                                <span><?= e($partLabel) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                        <div class="hint">
+                            Aussteller-Zugänge und Orga-Zuordnungen setzen voraus, dass auch die Aussteller
+                            übernommen werden.
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info" role="status">
+                        Anmeldungen, Anwesenheiten, QR-Codes, Ausstattungsanfragen und abgegebenes Feedback
+                        werden <strong>nie</strong> mitkopiert. Übernommene Aussteller starten auf „Lead“
+                        und sind noch nicht sichtbar.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" type="button" data-close-modal>Abbrechen</button>
+                    <button class="btn btn-primary" type="submit">Edition anlegen</button>
                 </div>
             </form>
         </dialog>

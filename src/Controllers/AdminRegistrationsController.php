@@ -6,12 +6,16 @@ namespace App\Controllers;
 
 use App\Core\Permissions;
 use App\Services\Capacity;
+use App\Services\Notifications;
+use App\Services\Waitlist;
 
 /**
  * Anmeldungen verwalten: Schüler suchen, Anmeldungen einsehen, manuell
  * hinzufügen, Zeitslot ändern und entfernen.
  *
- * Überbuchung ist nur mit explizitem Haken „Kapazität ignorieren" möglich.
+ * Überbuchung ist nur mit explizitem Haken „Kapazität ignorieren“ möglich.
+ * Wird eine Zuteilung entfernt, rückt automatisch die/der nächste Wartende
+ * nach (siehe Services\Waitlist).
  */
 final class AdminRegistrationsController extends Controller
 {
@@ -90,6 +94,8 @@ final class AdminRegistrationsController extends Controller
             'canCreate' => $this->ctx->auth->can(Permissions::ANMELDUNGEN_ERSTELLEN, $schoolId),
             'canDelete' => $this->ctx->auth->can(Permissions::ANMELDUNGEN_LOESCHEN, $schoolId),
             'searchLimit' => self::SEARCH_LIMIT,
+            // Offene Wünsche = Warteliste; wer nachrückt, entscheidet Services\Waitlist.
+            'waitlist' => $this->waitlist()->overview((int) $edition['id']),
         ]);
     }
 
@@ -255,25 +261,51 @@ final class AdminRegistrationsController extends Controller
             $this->redirect($this->ctx->schoolUrl('/admin/anmeldungen'));
         }
 
+        $freedSlot = $registration['timeslot_id'] !== null ? (int) $registration['timeslot_id'] : null;
+
         $this->ctx->db->run(
             'DELETE FROM registrations WHERE id = ? AND edition_id = ?',
             [$registrationId, $editionId],
         );
+
+        // Frei gewordener Platz: nächste:n Wartende:n nachrücken lassen.
+        $promoted = null;
+        if ($freedSlot !== null) {
+            $promoted = $this->waitlist()->promote(
+                $editionId,
+                (int) $registration['exhibitor_id'],
+                $freedSlot,
+                $schoolId,
+            );
+        }
+
         $this->ctx->audit->log(
             'Anmeldung entfernt',
             'warning',
             sprintf(
-                '%s bei %s',
+                '%s bei %s%s',
                 (string) $registration['student_name'],
                 (string) $registration['exhibitor_name'],
+                $promoted !== null ? ' — Platz an Wartende:n vergeben' : '',
             ),
             $schoolId,
         );
-        $this->flash('success', 'Anmeldung wurde entfernt.');
+        $this->flash('success', $promoted !== null
+            ? 'Anmeldung wurde entfernt. Der frei gewordene Platz ging an die/den nächste:n Wartende:n.'
+            : 'Anmeldung wurde entfernt.');
         $this->redirect($this->ctx->schoolUrl('/admin/anmeldungen?student=' . (int) $registration['user_id']));
     }
 
     // ---------- Helfer ----------
+
+    private function waitlist(): Waitlist
+    {
+        return new Waitlist(
+            $this->ctx->db,
+            new Capacity($this->ctx->db),
+            new Notifications($this->ctx->db),
+        );
+    }
 
     /** @return array<string, mixed>|null */
     private function findStudent(int $studentId, int $schoolId, int $editionId): ?array

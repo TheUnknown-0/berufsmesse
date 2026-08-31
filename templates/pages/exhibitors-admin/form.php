@@ -3,6 +3,7 @@
  * Aussteller anlegen/bearbeiten (Admin) inkl. Logo und Dokumenten.
  * Erwartet: $exhibitor (null beim Anlegen), $values, $industries,
  * $offerTypes, $visibleFieldLabels, $documents.
+ * Beim Bearbeiten zusätzlich: $notes (Akquise-Verlauf), $history (frühere Jahrgänge).
  */
 
 use App\Core\Permissions as P;
@@ -10,6 +11,9 @@ use App\Core\Permissions as P;
 $schoolId = $ctx->schoolId();
 $can = static fn (string $p): bool => $auth->can($p, $schoolId);
 $isNew = $exhibitor === null;
+// Beim Anlegen gibt es weder Verlauf noch Historie.
+$notes = $notes ?? [];
+$history = $history ?? [];
 $action = $isNew
     ? $ctx->schoolUrl('/admin/aussteller/neu')
     : $ctx->schoolUrl('/admin/aussteller/' . (int) $exhibitor['id']);
@@ -30,6 +34,7 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
 
 <?php foreach (page_blocks('admin-aussteller-formular', [
     'formular' => 'Aussteller-Formular',
+    'akquise' => 'Akquise & Historie',
     'logo-entfernen' => 'Logo entfernen',
     'dokumente' => 'Dokumente',
     'loeschen' => 'Aussteller löschen',
@@ -207,6 +212,95 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
         </div>
     <?php endif; ?>
 </form>
+
+<?php elseif ($blockKey === 'akquise'): ?>
+    <?php if (!$isNew): ?>
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-header"><h3 class="mt-0 mb-0">Frühere Jahrgänge</h3></div>
+                <div class="card-body">
+                    <?php if ($history === []): ?>
+                        <p class="text-faint mb-0">Dieses Unternehmen ist zum ersten Mal dabei.</p>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                <tr><th>Jahr</th><th>Messe</th><th>Anmeldungen</th><th>Besuche</th></tr>
+                                </thead>
+                                <tbody>
+                                <?php foreach ($history as $entry): ?>
+                                    <tr>
+                                        <td><strong><?= e((string) $entry['year']) ?></strong></td>
+                                        <td class="text-sm"><?= e((string) $entry['edition_name']) ?></td>
+                                        <td><?= e((string) $entry['registrations']) ?></td>
+                                        <td><?= e((string) $entry['attendances']) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mt-0 mb-0">Gesprächsverlauf</h3>
+                    <a class="btn btn-sm btn-ghost" href="<?= e($ctx->schoolUrl('/admin/aussteller/pipeline')) ?>">Pipeline</a>
+                </div>
+                <div class="card-body">
+                    <?php if ($can(P::AUSSTELLER_BEARBEITEN)): ?>
+                        <form method="post" action="<?= e($ctx->schoolUrl('/admin/aussteller/' . (int) $exhibitor['id'] . '/notiz')) ?>">
+                            <?= $csrf->field() ?>
+                            <input type="hidden" name="zurueck" value="profil">
+                            <div class="field">
+                                <label for="neue-notiz">Neue Notiz</label>
+                                <textarea id="neue-notiz" name="note" rows="2" maxlength="2000"
+                                          placeholder="Was wurde besprochen?"></textarea>
+                            </div>
+                            <button class="btn btn-sm btn-accent" type="submit">Notiz speichern</button>
+                        </form>
+                        <hr class="divider">
+                    <?php endif; ?>
+
+                    <?php if ($notes === []): ?>
+                        <p class="text-faint mb-0">Noch keine Einträge.</p>
+                    <?php else: ?>
+                        <div class="stack">
+                            <?php foreach ($notes as $note): ?>
+                                <div>
+                                    <div class="cluster">
+                                        <span class="text-sm text-faint"><?= e(format_datetime($note['created_at'])) ?></span>
+                                        <?php if ($note['username'] !== null): ?>
+                                            <span class="text-sm text-soft">
+                                                <?= e(trim((string) $note['firstname'] . ' ' . (string) $note['lastname']) ?: (string) $note['username']) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <?php if ($note['status_to'] !== null): ?>
+                                            <span class="badge badge-info">
+                                                <?= e(\App\Controllers\ExhibitorPipelineController::STAGES[$note['status_from']] ?? (string) $note['status_from']) ?>
+                                                →
+                                                <?= e(\App\Controllers\ExhibitorPipelineController::STAGES[$note['status_to']] ?? (string) $note['status_to']) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <?php if ($can(P::AUSSTELLER_BEARBEITEN)): ?>
+                                            <form method="post" style="margin-left:auto;"
+                                                  action="<?= e($ctx->schoolUrl('/admin/notiz/' . (int) $note['id'] . '/loeschen')) ?>"
+                                                  data-confirm="Diesen Eintrag wirklich löschen?">
+                                                <?= $csrf->field() ?>
+                                                <button class="btn btn-sm btn-danger-ghost" type="submit">×</button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
+                                    <p class="mb-0"><?= nl2br(e((string) $note['body'])) ?></p>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
 <?php elseif ($blockKey === 'logo-entfernen'): ?>
 <?php if (!$isNew && !empty($exhibitor['logo']) && $can(P::AUSSTELLER_BEARBEITEN)): ?>

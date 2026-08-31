@@ -116,6 +116,7 @@ if ($canMaintain) {
 <?php elseif ($tab === 'zeitslots'): ?>
     <?php foreach (page_blocks('admin-einstellungen-zeitslots', [
         'hinweis-zuteilungen' => 'Hinweis zu bestehenden Zuteilungen',
+        'zeitslot-assistent' => 'Zeitraster-Assistent',
         'zeitslot-liste' => 'Zeitslots',
         'zeitslot-neu' => 'Neuen Zeitslot anlegen',
     ]) as $blockKey => $blockLabel): ?>
@@ -234,6 +235,80 @@ if ($canMaintain) {
                     </div>
                 <?php endif; ?>
             </div>
+
+        <?php elseif ($blockKey === 'zeitslot-assistent'): ?>
+            <?php if ($canEdit): ?>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🪄 Zeitraster-Assistent</h3>
+                    </div>
+                    <form method="post" action="<?= e($ctx->schoolUrl('/admin/einstellungen/zeitslots/assistent')) ?>"
+                          data-confirm="Zeitraster jetzt erzeugen? Ein bestehendes Raster wird dabei ersetzt.">
+                        <div class="card-body">
+                            <?= $csrf->field() ?>
+                            <p class="text-sm text-soft">
+                                Erzeugt das komplette Raster in einem Schritt. Pausen bekommen einen eigenen Eintrag,
+                                die Slot-Nummern werden fortlaufend vergeben.
+                            </p>
+
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="raster-start">Beginn *</label>
+                                    <input class="input" type="time" id="raster-start" name="start" value="08:00" required>
+                                </div>
+                                <div class="field">
+                                    <label for="raster-count">Anzahl Slots *</label>
+                                    <input class="input" type="number" id="raster-count" name="count" value="6" min="1" max="20" required>
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="raster-duration">Slotdauer (Minuten) *</label>
+                                    <input class="input" type="number" id="raster-duration" name="duration" value="45" min="5" max="240" required>
+                                </div>
+                                <div class="field">
+                                    <label for="raster-gap">Wechselzeit zwischen Slots (Minuten)</label>
+                                    <input class="input" type="number" id="raster-gap" name="gap" value="5" min="0" max="60">
+                                    <div class="hint">Zeit für den Raumwechsel. 0 = Slots schließen direkt aneinander an.</div>
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label for="raster-break-after">Große Pause nach Slot</label>
+                                    <input class="input" type="number" id="raster-break-after" name="break_after" value="0" min="0" max="20">
+                                    <div class="hint">0 = keine Pause einplanen.</div>
+                                </div>
+                                <div class="field">
+                                    <label for="raster-break-minutes">Pausendauer (Minuten)</label>
+                                    <input class="input" type="number" id="raster-break-minutes" name="break_minutes" value="20" min="5" max="120">
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label for="raster-free">Slots zur freien Wahl</label>
+                                <input class="input" type="text" id="raster-free" name="free_slots" placeholder="z. B. 2, 4">
+                                <div class="hint">
+                                    Nummern der Slots, die <strong>nicht</strong> vorab zugeteilt werden (Check-in vor Ort schreibt ein).
+                                    Mehrere durch Komma trennen, leer lassen für lauter feste Slots.
+                                </div>
+                            </div>
+
+                            <label class="checkbox-row">
+                                <input type="checkbox" name="replace" value="1">
+                                <span>Bestehendes Raster ersetzen</span>
+                            </label>
+                            <div class="hint">
+                                Nur möglich, solange keine Zuteilungen oder Anwesenheiten daran hängen.
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <button class="btn btn-accent" type="submit">Raster erzeugen</button>
+                        </div>
+                    </form>
+                </div>
+            <?php endif; ?>
 
         <?php elseif ($blockKey === 'zeitslot-neu'): ?>
             <?php if ($canEdit): ?>

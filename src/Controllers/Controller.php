@@ -107,6 +107,32 @@ abstract class Controller
         $this->ctx->session->flash($type, $message);
     }
 
+    /**
+     * Prüft einen vom Gerät gelieferten Erfassungszeitpunkt (offline
+     * gepufferte Scans).
+     *
+     * Der Wert kommt vom Client und ist damit manipulierbar — deshalb wird
+     * er eng begrenzt: nur Vergangenheit, höchstens sechs Stunden zurück.
+     * Alles andere wird verworfen, dann gilt „jetzt“.
+     */
+    protected function offlineTimestamp(mixed $raw): ?string
+    {
+        if (!is_string($raw) || $raw === '') {
+            return null;
+        }
+        $timestamp = strtotime($raw);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        $now = time();
+        if ($timestamp > $now || $timestamp < $now - 6 * 3600) {
+            return null;
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
+    }
+
     /** JSON-Fehlerantwort als Array (vom Front-Controller serialisiert). */
     protected function jsonError(string $message, int $status = 400): array
     {

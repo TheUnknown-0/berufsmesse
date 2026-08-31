@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Controllers\AttendanceController;
+use App\Controllers\FailoverController;
+use App\Controllers\OpsBoardController;
 use App\Controllers\CheckinController;
 use App\Controllers\QrAdminController;
 use App\Controllers\SupervisionController;
@@ -36,6 +38,15 @@ return static function (Router $r): void {
     $r->get('/{school}/admin/anwesenheit-live', [AttendanceController::class, 'live']);
     $r->get('/{school}/api/anwesenheit/live', [AttendanceController::class, 'apiLive']);
     $r->get('/{school}/admin/anwesenheit-bericht', [AttendanceController::class, 'report']);
+
+    // Leitstand: Gesamtsicht auf den Messetag
+    $r->get('/{school}/admin/leitstand', [OpsBoardController::class, 'index']);
+    $r->get('/{school}/api/leitstand', [OpsBoardController::class, 'apiState']);
+
+    // Kurzfristiger Ausfall eines Ausstellers
+    $r->get('/{school}/admin/ausfall', [FailoverController::class, 'index']);
+    $r->get('/{school}/admin/ausfall/{id}', [FailoverController::class, 'preview']);
+    $r->post('/{school}/admin/ausfall/{id}/umbuchen', [FailoverController::class, 'execute']);
 
     // ---------- Aufsichtsplan ----------
     $r->get('/{school}/admin/aufsicht', [SupervisionController::class, 'index']);

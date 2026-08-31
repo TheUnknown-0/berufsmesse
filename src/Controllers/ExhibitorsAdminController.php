@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\ExhibitorHistory;
 use App\Services\Uploads;
 
 /**
@@ -188,6 +189,16 @@ final class ExhibitorsAdminController extends Controller
             );
         }
 
+        // Akquise-Verlauf und Teilnahmen früherer Jahrgänge
+        $notes = $this->ctx->db->fetchAll(
+            'SELECT n.*, u.firstname, u.lastname, u.username
+             FROM exhibitor_notes n
+             LEFT JOIN users u ON u.id = n.user_id
+             WHERE n.exhibitor_id = ?
+             ORDER BY n.created_at DESC, n.id DESC',
+            [(int) $exhibitor['id']],
+        );
+
         return $this->render('pages/exhibitors-admin/form', [
             'title' => $exhibitor['name'],
             'exhibitor' => $exhibitor,
@@ -196,6 +207,8 @@ final class ExhibitorsAdminController extends Controller
             'offerTypes' => self::OFFER_TYPES,
             'visibleFieldLabels' => self::VISIBLE_FIELDS,
             'documents' => $documents,
+            'notes' => $notes,
+            'history' => (new ExhibitorHistory($this->ctx->db))->previous((int) $exhibitor['id']),
         ]);
     }
 
