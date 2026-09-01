@@ -42,11 +42,11 @@ final class QrAdminController extends Controller
 
         $qr = new QrService($this->ctx->db, $this->ctx->settings);
         $slug = (string) $this->ctx->school['slug'];
-        $base = $this->qrBaseUrl();
+        $base = $this->ctx->publicBase();
 
         $tokens = [];
         foreach ($tokenRows as $row) {
-            $row['url'] = $qr->checkinUrl($this->ctx->schoolId(), $slug, (string) $row['token'], $base);
+            $row['url'] = $qr->checkinUrl($slug, (string) $row['token'], $base);
             $tokens[(int) $row['exhibitor_id']][(int) $row['timeslot_id']] = $row;
         }
 
@@ -63,6 +63,7 @@ final class QrAdminController extends Controller
             'canCreate' => $this->ctx->auth->can(Permissions::QR_CODES_ERSTELLEN, $this->ctx->schoolId()),
             'canSeeStudents' => $this->ctx->auth->can(Permissions::ANWESENHEIT_SEHEN, $this->ctx->schoolId()),
             'qrBase' => $base,
+            'baseIsGuessed' => $this->ctx->baseIsGuessed(),
             'schoolSlug' => $slug,
         ]);
     }
@@ -135,7 +136,7 @@ final class QrAdminController extends Controller
         $attendance = new AttendanceService($this->ctx->db);
         $qr = new QrService($this->ctx->db, $this->ctx->settings);
         $slug = (string) $this->ctx->school['slug'];
-        $base = $this->qrBaseUrl();
+        $base = $this->ctx->publicBase();
 
         $sheets = [];
         foreach ($attendance->slots($editionId) as $slot) {
@@ -147,7 +148,7 @@ final class QrAdminController extends Controller
                 'slot' => $slot,
                 'token' => is_string($token) ? $token : null,
                 'url' => is_string($token)
-                    ? $qr->checkinUrl($this->ctx->schoolId(), $slug, $token, $base)
+                    ? $qr->checkinUrl($slug, $token, $base)
                     : null,
             ];
         }
@@ -260,17 +261,5 @@ final class QrAdminController extends Controller
         header('Cache-Control: private, max-age=300');
 
         return qrSvg($data, $scale, 4);
-    }
-
-    /**
-     * Basis-URL für die im QR kodierte Check-in-Adresse, falls das Setting
-     * `qr_code_url` leer ist: aus dem aktuellen Request-Host gebaut.
-     */
-    private function qrBaseUrl(): string
-    {
-        $https = ($_SERVER['HTTPS'] ?? '') !== '' && ($_SERVER['HTTPS'] ?? '') !== 'off';
-        $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
-
-        return ($https ? 'https://' : 'http://') . $host . (string) ($this->ctx->config['app']['base_url'] ?? '');
     }
 }

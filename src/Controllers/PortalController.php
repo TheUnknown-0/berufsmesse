@@ -134,7 +134,8 @@ final class PortalController extends Controller
             $old = is_string($logo) && $logo !== '' ? $logo : null;
             $logo = $stored['filename'];
             if ($old !== null) {
-                $uploads->delete('logos', $old);
+                // Nur loeschen, wenn keine andere Edition dasselbe Bild nutzt.
+                $uploads->deleteLogoIfUnused($this->ctx->db, $old, $exhibitorId);
             }
         }
 

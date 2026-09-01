@@ -25,6 +25,9 @@ $card = static function (array $exhibitor) use ($allRooms, $canEdit): void {
     ?>
     <div class="card card-pad" data-exhibitor="<?= e((string) $id) ?>"<?= $canEdit ? ' draggable="true"' : '' ?>>
         <div class="cluster">
+            <?php if ($canEdit): ?>
+                <span class="drag-grip" aria-hidden="true" title="Zum Verschieben ziehen — am Touchscreen kurz halten">⠿</span>
+            <?php endif; ?>
             <strong style="flex:1;min-width:120px;"><?= e($exhibitor['name']) ?></strong>
             <?php if ((int) $exhibitor['active'] !== 1): ?>
                 <span class="badge badge-warning">inaktiv</span>
@@ -50,13 +53,16 @@ $card = static function (array $exhibitor) use ($allRooms, $canEdit): void {
     <?php
 };
 ?>
+<?php /* Wurzel für room-plan.js: trägt den Speicher-Endpunkt. */ ?>
+<div data-roomplan data-assign-url="<?= e($ctx->schoolUrl('/api/raumplan/zuteilen')) ?>"></div>
+
 <div class="page-header">
     <div class="page-title-group">
         <div class="page-eyebrow"><a class="text-soft" href="<?= e($ctx->schoolUrl('/admin/raeume')) ?>">← Räume</a></div>
         <h1 class="page-title">Raumplanung</h1>
         <p class="page-sub">
-            Aussteller auf einen Raum ziehen — oder auf der Karte den Raum auswählen.
-            Änderungen werden sofort gespeichert.
+            Aussteller auf einen Raum ziehen — am Touchscreen kurz halten, dann ziehen.
+            Alternativ auf der Karte den Raum auswählen. Änderungen werden sofort gespeichert.
         </p>
     </div>
 </div>

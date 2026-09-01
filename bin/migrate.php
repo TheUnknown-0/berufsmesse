@@ -17,6 +17,17 @@ $pdo = new PDO(
     [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
 );
 
+// Nur ein Prozess migriert. Ohne Sperre könnten zwei gleichzeitig startende
+// Container dieselbe Datei anwenden — die zweite Ausführung scheitert dann
+// mitten im Schema. Die Sperre gilt für die Verbindung und fällt beim Beenden
+// automatisch weg.
+$lock = $pdo->prepare('SELECT GET_LOCK(?, ?)');
+$lock->execute(['berufsmesse_migrate', 60]);
+if ((int) $lock->fetchColumn() !== 1) {
+    fwrite(STDERR, "Migrationen laufen bereits in einem anderen Prozess — Abbruch.\n");
+    exit(1);
+}
+
 $pdo->exec(<<<'SQL'
     CREATE TABLE IF NOT EXISTS schema_migrations (
         filename VARCHAR(255) NOT NULL PRIMARY KEY,
@@ -50,6 +61,12 @@ foreach ($files as $file) {
         $ran++;
     } catch (Throwable $e) {
         fwrite(STDERR, "Migration {$name} fehlgeschlagen: {$e->getMessage()}\n");
+        fwrite(STDERR,
+            "ACHTUNG: Enthält die Datei mehrere Anweisungen, sind die davor\n"
+            . "liegenden bereits angewendet, ohne dass die Migration als erledigt\n"
+            . "vermerkt wurde. Der Zustand der Datenbank muss von Hand geprüft und\n"
+            . "die Datei entweder nachgezogen oder in schema_migrations eingetragen\n"
+            . "werden, sonst scheitert jeder weitere Start an derselben Stelle.\n");
         exit(1);
     }
 }

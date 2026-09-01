@@ -62,12 +62,25 @@ final class Audit
         return filter_var($first, FILTER_VALIDATE_IP) !== false ? $first : $remote;
     }
 
+    /**
+     * Vertrauenswürdige Proxys.
+     *
+     * Der Standard umfasst NUR die Loopback-Adresse. Früher galten die ganzen
+     * privaten Bereiche (10/8, 172.16/12, 192.168/16) als vertrauenswürdig —
+     * in einem Schulnetz ist damit jeder Rechner ein „Proxy“ und kann per
+     * X-Forwarded-For eine beliebige Absenderadresse behaupten. Damit ließen
+     * sich sämtliche IP-Grenzen (Login, Registrierung, Check-in) umgehen und
+     * die Einträge im Audit-Log fälschen.
+     *
+     * Wer hinter einem echten Reverse-Proxy betreibt, trägt dessen Adresse
+     * in TRUSTED_PROXIES ein — und nur diese.
+     */
     private static function isTrustedProxy(string $ip): bool
     {
         $raw = getenv('TRUSTED_PROXIES');
         $cidrs = $raw !== false && $raw !== ''
             ? array_map('trim', explode(',', $raw))
-            : ['172.16.0.0/12', '10.0.0.0/8', '192.168.0.0/16', '127.0.0.1'];
+            : ['127.0.0.1', '::1'];
 
         foreach ($cidrs as $cidr) {
             if (self::ipInCidr($ip, $cidr)) {

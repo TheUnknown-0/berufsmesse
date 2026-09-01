@@ -35,39 +35,79 @@ final class Waitlist
      */
     public function promote(int $editionId, int $exhibitorId, int $timeslotId, ?int $schoolId = null): ?array
     {
-        $this->capacity->refresh($editionId);
-        if (!$this->capacity->hasFree($editionId, $exhibitorId, $timeslotId)) {
+        // Kandidatensuche und Zuteilung müssen zusammen atomar sein: Zwei
+        // gleichzeitige Abmeldungen desselben Aussteller-Slots finden sonst
+        // dieselbe Person, und der zweite Durchlauf meldet ein Nachrücken,
+        // das nie stattgefunden hat. Die Benachrichtigung geht deshalb erst
+        // nach dem Commit raus.
+        // In einen abgesagten Aussteller rückt niemand nach. Die Prüfung steht
+        // bewusst VOR der Transaktion und nicht als JOIN in der Kandidatensuche:
+        // Die Aussteller-ID liegt fest, und ein JOIN würde die FOR-UPDATE-Sperre
+        // unnötig auf die exhibitors-Zeile ausdehnen.
+        $active = $this->db->fetchValue(
+            'SELECT 1 FROM exhibitors WHERE id = ? AND edition_id = ? AND active = 1',
+            [$exhibitorId, $editionId],
+        );
+        if ($active === null) {
             return null;
         }
 
-        // Kandidaten: offene Wünsche für genau diesen Aussteller, deren
-        // Schüler:in im fraglichen Slot noch frei ist.
-        $candidate = $this->db->fetchOne(
-            'SELECT r.id, r.user_id, e.name AS exhibitor_name,
-                    t.slot_name, t.slot_number, t.start_time, t.end_time
-             FROM registrations r
-             JOIN exhibitors e ON e.id = r.exhibitor_id
-             JOIN timeslots t ON t.id = ?
-             WHERE r.edition_id = ? AND r.exhibitor_id = ? AND r.timeslot_id IS NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM registrations belegt
-                    WHERE belegt.user_id = r.user_id
-                      AND belegt.edition_id = r.edition_id
-                      AND belegt.timeslot_id = ?
-               )
-             ORDER BY r.priority IS NULL, r.priority ASC, r.registered_at ASC, r.id ASC
-             LIMIT 1',
-            [$timeslotId, $editionId, $exhibitorId, $timeslotId],
-        );
+        $candidate = $this->db->transaction(function () use ($editionId, $exhibitorId, $timeslotId): ?array {
+            $this->capacity->refresh($editionId);
+            if (!$this->capacity->hasFree($editionId, $exhibitorId, $timeslotId)) {
+                return null;
+            }
+
+            // Kandidat:in sperren (FOR UPDATE): Ein parallel laufender Aufruf
+            // wartet hier, statt dieselbe Zeile zu greifen. Die Sperre liegt
+            // bewusst nur auf registrations — die Anzeigedaten kommen danach
+            // ungesperrt dazu.
+            $found = $this->db->fetchOne(
+                'SELECT r.id, r.user_id
+                 FROM registrations r
+                 WHERE r.edition_id = ? AND r.exhibitor_id = ? AND r.timeslot_id IS NULL
+                   AND NOT EXISTS (
+                       SELECT 1 FROM registrations belegt
+                        WHERE belegt.user_id = r.user_id
+                          AND belegt.edition_id = r.edition_id
+                          AND belegt.timeslot_id = ?
+                   )
+                 ORDER BY r.priority IS NULL, r.priority ASC, r.registered_at ASC, r.id ASC
+                 LIMIT 1
+                 FOR UPDATE',
+                [$editionId, $exhibitorId, $timeslotId],
+            );
+            if ($found === null) {
+                return null;
+            }
+
+            // Trotz Sperre den Treffer prüfen: Schlägt das UPDATE fehl, ist der
+            // Wunsch zwischenzeitlich anderweitig zugeteilt worden — dann darf
+            // weder reserviert noch benachrichtigt werden.
+            $stmt = $this->db->run(
+                'UPDATE registrations SET timeslot_id = ? WHERE id = ? AND edition_id = ? AND timeslot_id IS NULL',
+                [$timeslotId, (int) $found['id'], $editionId],
+            );
+            if ($stmt->rowCount() !== 1) {
+                return null;
+            }
+            $this->capacity->reserve($editionId, $exhibitorId, $timeslotId);
+
+            // Anzeigedaten für Rückgabe und Benachrichtigung
+            return $this->db->fetchOne(
+                'SELECT r.id, r.user_id, e.name AS exhibitor_name,
+                        t.slot_name, t.slot_number, t.start_time, t.end_time
+                 FROM registrations r
+                 JOIN exhibitors e ON e.id = r.exhibitor_id
+                 JOIN timeslots t ON t.id = ?
+                 WHERE r.id = ?',
+                [$timeslotId, (int) $found['id']],
+            );
+        });
+
         if ($candidate === null) {
             return null;
         }
-
-        $this->db->run(
-            'UPDATE registrations SET timeslot_id = ? WHERE id = ? AND edition_id = ? AND timeslot_id IS NULL',
-            [$timeslotId, (int) $candidate['id'], $editionId],
-        );
-        $this->capacity->reserve($editionId, $exhibitorId, $timeslotId);
 
         $slotLabel = $candidate['slot_name'] !== null && $candidate['slot_name'] !== ''
             ? (string) $candidate['slot_name']

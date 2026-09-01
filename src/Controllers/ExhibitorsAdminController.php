@@ -255,9 +255,15 @@ final class ExhibitorsAdminController extends Controller
 
         $this->ctx->db->run($sql, $args);
 
-        // Altes Logo erst nach erfolgreichem Update entfernen
-        if ($newLogo !== null && is_string($exhibitor['logo']) && $exhibitor['logo'] !== '') {
-            $this->uploads()->delete('logos', $exhibitor['logo']);
+        // Altes Logo erst nach erfolgreichem Update entfernen — und nur, wenn
+        // keine andere Edition dieselbe Datei referenziert (Edition-Klonen
+        // uebernimmt den Dateinamen, nicht die Datei).
+        if ($newLogo !== null) {
+            $this->uploads()->deleteLogoIfUnused(
+                $this->ctx->db,
+                is_string($exhibitor['logo']) ? $exhibitor['logo'] : null,
+                (int) $exhibitor['id'],
+            );
         }
 
         $this->ctx->audit->log(
@@ -283,9 +289,11 @@ final class ExhibitorsAdminController extends Controller
             'UPDATE exhibitors SET logo = NULL WHERE id = ? AND edition_id = ?',
             [(int) $exhibitor['id'], (int) $edition['id']],
         );
-        if (is_string($exhibitor['logo']) && $exhibitor['logo'] !== '') {
-            $this->uploads()->delete('logos', $exhibitor['logo']);
-        }
+        $this->uploads()->deleteLogoIfUnused(
+            $this->ctx->db,
+            is_string($exhibitor['logo']) ? $exhibitor['logo'] : null,
+            (int) $exhibitor['id'],
+        );
 
         $this->ctx->audit->log(
             'Aussteller-Logo entfernt',
@@ -306,33 +314,63 @@ final class ExhibitorsAdminController extends Controller
         $edition = $this->ctx->requireEdition();
 
         $exhibitor = $this->findExhibitor((int) $params['id']);
+        $exhibitorId = (int) $exhibitor['id'];
+        $editionId = (int) $edition['id'];
         $uploads = $this->uploads();
+
+        // Löschen kaskadiert über Fremdschlüssel auf Anmeldungen UND
+        // Anwesenheiten. Sind bereits Check-ins erfasst, wären hinterher
+        // Anwesenheitsbericht und Jahresvergleich rückwirkend falsch — ohne
+        // dass es jemandem auffällt. Für diesen Fall ist das Absagen der
+        // richtige Weg: Es benachrichtigt, bucht um und erhält die Historie.
+        $checkins = (int) $this->ctx->db->fetchValue(
+            'SELECT COUNT(*) FROM attendance WHERE exhibitor_id = ? AND edition_id = ?',
+            [$exhibitorId, $editionId],
+        );
+        if ($checkins > 0) {
+            $this->flash('error', sprintf(
+                'Für diesen Aussteller sind bereits %d Check-ins erfasst. Löschen würde sie mitsamt den '
+                . 'Anwesenheitsberichten unwiederbringlich entfernen. Bitte stattdessen absagen oder deaktivieren.',
+                $checkins,
+            ));
+            $this->redirect($this->ctx->schoolUrl('/admin/aussteller/' . $exhibitorId));
+        }
+
+        $registrations = (int) $this->ctx->db->fetchValue(
+            'SELECT COUNT(*) FROM registrations WHERE exhibitor_id = ? AND edition_id = ? AND timeslot_id IS NOT NULL',
+            [$exhibitorId, $editionId],
+        );
 
         // Dateinamen vor dem CASCADE-Delete einsammeln
         $documents = $this->ctx->db->fetchAll(
             'SELECT filename FROM exhibitor_documents WHERE exhibitor_id = ?',
-            [(int) $exhibitor['id']],
+            [$exhibitorId],
         );
 
         $this->ctx->db->run(
             'DELETE FROM exhibitors WHERE id = ? AND edition_id = ?',
-            [(int) $exhibitor['id'], (int) $edition['id']],
+            [$exhibitorId, $editionId],
         );
 
         foreach ($documents as $document) {
             $uploads->delete('documents', (string) $document['filename']);
         }
-        if (is_string($exhibitor['logo']) && $exhibitor['logo'] !== '') {
-            $uploads->delete('logos', $exhibitor['logo']);
-        }
+        $uploads->deleteLogoIfUnused(
+            $this->ctx->db,
+            is_string($exhibitor['logo']) ? $exhibitor['logo'] : null,
+            (int) $exhibitor['id'],
+        );
 
         $this->ctx->audit->log(
             'Aussteller gelöscht',
             'warning',
-            'Aussteller: ' . (string) $exhibitor['name'] . ' (ID ' . (int) $exhibitor['id'] . ')',
+            'Aussteller: ' . (string) $exhibitor['name'] . ' (ID ' . $exhibitorId . ')'
+                . ($registrations > 0 ? sprintf(' — dabei %d Zuteilungen entfernt', $registrations) : ''),
             $this->ctx->schoolId(),
         );
-        $this->flash('success', 'Der Aussteller wurde gelöscht.');
+        $this->flash('success', $registrations > 0
+            ? sprintf('Der Aussteller wurde gelöscht. %d Zuteilungen wurden dabei entfernt.', $registrations)
+            : 'Der Aussteller wurde gelöscht.');
         $this->redirect($this->ctx->schoolUrl('/admin/aussteller'));
     }
 

@@ -31,7 +31,17 @@ $notifClasses = [
     'info' => 'alert-info',
 ];
 ?>
+<?php
+/*
+ * Kennung des aktuellen Hinweis-Stands. Klickt jemand das Modal weg, merkt
+ * sich das JS diese Kennung für die Sitzung und drängt sich nicht auf jeder
+ * Folgeseite erneut auf. Kommt ein neuer Hinweis dazu, ändert sich die
+ * Kennung und das Modal meldet sich wieder.
+ */
+$notifStamp = implode('-', array_map(static fn (array $n): string => (string) $n['id'], $notifItems));
+?>
 <dialog class="modal" id="notifications-modal"
+        data-notifications-stamp="<?= e($notifStamp) ?>"
         data-notifications-url="<?= e($ctx->url('/api/benachrichtigungen/gelesen')) ?>">
     <div class="modal-header">
         <h3>Neue Hinweise (<?= e((string) count($notifItems)) ?>)</h3>

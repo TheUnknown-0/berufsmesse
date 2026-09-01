@@ -30,6 +30,14 @@ abstract class Controller
     {
         $user = $this->ctx->auth->user();
         if ($user === null) {
+            // API-Routen bekommen 401 statt einer Weiterleitung: Ein fetch()
+            // folgt dem Redirect und erhält HTML — der Aufrufer könnte das
+            // nicht von einer fachlichen Ablehnung unterscheiden und würde
+            // gepufferte Scans verwerfen.
+            if ($this->isApiRequest()) {
+                throw new HttpException(401, 'Deine Anmeldung ist abgelaufen. Bitte neu anmelden.');
+            }
+
             $target = $this->ctx->school !== null
                 ? $this->ctx->schoolUrl('/login')
                 : $this->ctx->url('/login');
@@ -38,10 +46,24 @@ abstract class Controller
 
         if ((int) ($user['must_change_password'] ?? 0) === 1
             && !str_contains($_SERVER['REQUEST_URI'] ?? '', '/passwort-aendern')) {
+            if ($this->isApiRequest()) {
+                throw new HttpException(401, 'Bitte zuerst das Passwort ändern.');
+            }
             $this->redirect($this->ctx->url('/passwort-aendern'));
         }
 
         return $user;
+    }
+
+    /** Erwartet der Aufrufer JSON (API-Route oder Accept-Header)? */
+    protected function isApiRequest(): bool
+    {
+        $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '';
+        if (str_contains($path, '/api/')) {
+            return true;
+        }
+
+        return str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
     }
 
     /**
@@ -131,6 +153,25 @@ abstract class Controller
         }
 
         return date('Y-m-d H:i:s', $timestamp);
+    }
+
+    /**
+     * Anfragedaten einer JSON-Schnittstelle.
+     *
+     * Der Scanner und die Check-in-Seite senden JSON, klassische Formulare
+     * senden $_POST — beides muss dieselbe Aktion bedienen.
+     *
+     * @return array<string, mixed>
+     */
+    protected function jsonInput(): array
+    {
+        $raw = file_get_contents('php://input');
+        if ($raw === false || $raw === '') {
+            return $_POST;
+        }
+        $data = json_decode($raw, true);
+
+        return is_array($data) ? $data : $_POST;
     }
 
     /** JSON-Fehlerantwort als Array (vom Front-Controller serialisiert). */

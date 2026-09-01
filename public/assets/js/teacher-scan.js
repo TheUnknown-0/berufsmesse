@@ -32,6 +32,7 @@
 
     var busy = false;
     var pending = null; // Zurückgestellter Check-in bei falschem Raum
+    var chosenExhibitor = null; // Nur nötig, wenn mehrere im selben Raum sind
 
     function show(type, message) {
         resultBox.textContent = '';
@@ -65,6 +66,8 @@
         presentBox.textContent = '';
         missingBox.textContent = '';
 
+        renderExhibitorChoice(data);
+
         roomLabel.textContent = data.exhibitor
             ? data.room + ' — ' + data.exhibitor
             : data.room + ' — kein aktiver Aussteller';
@@ -96,9 +99,63 @@
         });
     }
 
+    /**
+     * Teilen sich mehrere Aussteller einen Raum, lässt sich ein Scan nicht
+     * über den Raum allein zuordnen — dann muss die Lehrkraft wählen.
+     */
+    function renderExhibitorChoice(data) {
+        var box = document.getElementById('scan-exhibitor-choice');
+        if (!box) { return; }
+
+        var choices = data.choices || [];
+        if (choices.length < 2) {
+            box.hidden = true;
+            box.textContent = '';
+            chosenExhibitor = choices.length === 1 ? choices[0].id : null;
+            return;
+        }
+
+        if (!chosenExhibitor || !choices.some(function (c) { return c.id === chosenExhibitor; })) {
+            chosenExhibitor = data.exhibitor_id || choices[0].id;
+        }
+        // Auswahl nur neu aufbauen, wenn sich der Raum geändert hat.
+        if (box.dataset.forRoom === roomSelect.value) {
+            box.hidden = false;
+            return;
+        }
+
+        box.textContent = '';
+        box.dataset.forRoom = roomSelect.value;
+
+        var label = document.createElement('label');
+        label.className = 'label';
+        label.setAttribute('for', 'scan-exhibitor');
+        label.textContent = 'Mehrere Aussteller in diesem Raum — Check-in gilt für:';
+
+        var select = document.createElement('select');
+        select.className = 'input';
+        select.id = 'scan-exhibitor';
+        choices.forEach(function (c) {
+            var opt = document.createElement('option');
+            opt.value = String(c.id);
+            opt.textContent = c.name;
+            if (c.id === chosenExhibitor) { opt.selected = true; }
+            select.appendChild(opt);
+        });
+        select.addEventListener('change', function () {
+            chosenExhibitor = parseInt(select.value, 10);
+            loadRoster();
+        });
+
+        box.appendChild(label);
+        box.appendChild(select);
+        box.hidden = false;
+    }
+
     function loadRoster() {
         var url = rosterUrl + '?room=' + encodeURIComponent(roomSelect.value)
             + '&slot=' + encodeURIComponent(slotSelect.value);
+        if (chosenExhibitor) { url += '&exhibitor_id=' + encodeURIComponent(chosenExhibitor); }
 
         BM.fetchJson(url, { method: 'GET' }).then(function (data) {
             if (data.success) {
@@ -117,6 +174,7 @@
 
         payload.room_id = parseInt(roomSelect.value, 10);
         payload.timeslot_id = parseInt(slotSelect.value, 10);
+        if (chosenExhibitor) { payload.exhibitor_id = chosenExhibitor; }
         if (force) { payload.force = 1; }
 
         BM.fetchJson(checkinUrl, { json: payload }).then(function (data) {
@@ -136,6 +194,10 @@
             if (data.success) {
                 show(data.status === 'already' ? 'info' : 'success', data.message);
                 if (input) { input.value = ''; }
+                loadRoster();
+            } else if (data.choices && data.choices.length > 1) {
+                // Server verlangt eine eindeutige Zuordnung.
+                show('warning', data.error);
                 loadRoster();
             } else {
                 show('error', data.error || data.message || 'Der Check-in hat nicht geklappt.');
@@ -213,7 +275,10 @@
     });
 
     refreshBtn.addEventListener('click', loadRoster);
-    roomSelect.addEventListener('change', loadRoster);
+    roomSelect.addEventListener('change', function () {
+        chosenExhibitor = null;
+        loadRoster();
+    });
     slotSelect.addEventListener('change', loadRoster);
 
     loadRoster();

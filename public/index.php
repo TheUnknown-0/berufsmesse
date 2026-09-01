@@ -33,33 +33,40 @@ if ($path !== '/' && str_ends_with($path, '/')) {
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$isApi = str_contains($path, '/api/');
-
-// ---------- Globales Seitenpasswort (optional) ----------
-$exemptPrefixes = ['/zugang', '/assets/', '/favicon'];
-$exempt = false;
-foreach ($exemptPrefixes as $prefix) {
-    if (str_starts_with($path, $prefix)) {
-        $exempt = true;
-        break;
-    }
-}
-if (!$exempt
-    && $ctx->settings->getBool('site_password_enabled')
-    && $ctx->session->get('site_authenticated') !== true) {
-    header('Location: ' . $ctx->url('/zugang?redirect=' . urlencode($path)), true, 303);
-    exit;
-}
-
-// ---------- Routen laden ----------
-$router = new Router();
-foreach (glob(dirname(__DIR__) . '/src/routes/*.php') ?: [] as $routeFile) {
-    $register = require $routeFile;
-    $register($router);
-}
+$isApi = str_contains($path, '/api/')
+    || str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json');
 
 // ---------- Dispatch ----------
+// Alles ab hier läuft im try-Block: Das Seitenpasswort und das Laden der Routen
+// greifen bereits auf Datenbank und Dateisystem zu — liefe das davor, endete
+// ein Datenbankausfall in einer ungefangenen Exception mit HTTP 200, weil die
+// Header dann längst raus sind.
 try {
+    // ---------- Globales Seitenpasswort (optional) ----------
+    // /healthz und /readyz müssen auch bei aktivem Seitenpasswort antworten —
+    // sonst meldet der Container-Healthcheck eine Weiterleitung statt Zustand.
+    $exemptPrefixes = ['/zugang', '/assets/', '/favicon', '/healthz', '/readyz'];
+    $exempt = false;
+    foreach ($exemptPrefixes as $prefix) {
+        if (str_starts_with($path, $prefix)) {
+            $exempt = true;
+            break;
+        }
+    }
+    if (!$exempt
+        && $ctx->settings->getBool('site_password_enabled')
+        && $ctx->session->get('site_authenticated') !== true) {
+        header('Location: ' . $ctx->url('/zugang?redirect=' . urlencode($path)), true, 303);
+        exit;
+    }
+
+    // ---------- Routen laden ----------
+    $router = new Router();
+    foreach (glob(dirname(__DIR__) . '/src/routes/*.php') ?: [] as $routeFile) {
+        $register = require $routeFile;
+        $register($router);
+    }
+
     $match = $router->match($method, $path);
     if ($match === null) {
         throw new HttpException($router->allowsOtherMethod($method, $path) ? 405 : 404);

@@ -45,7 +45,8 @@
   --surface-2: #f9fafb;
   --ink: #1f2937;
   --ink-soft: #6b7280;
-  --ink-faint: #9ca3af;
+  /* Kontrast zu Weiss ~4,8:1 (vorher #9ca3af mit ~2,5:1 unter WCAG AA) */
+  --ink-faint: #6b7280;
   --border: #e5e7eb;
   --border-strong: #d1d5db;
 
@@ -86,7 +87,8 @@
   --surface-2: #273449;
   --ink: #e5e7eb;
   --ink-soft: #9ca3af;
-  --ink-faint: #6b7280;
+  /* Auf dunklem Grund entsprechend aufgehellt */
+  --ink-faint: #98a3b3;
   --border: #374151;
   --border-strong: #4b5563;
 
@@ -549,6 +551,91 @@ body:has(.arrange-bar) .app-content { padding-bottom: 110px; }
     background: rgb(15 20 19 / 0.45);
   }
   .sidebar-backdrop[hidden] { display: none; }
+
+  /*
+   * Ohne JavaScript ist die Navigation sonst unerreichbar: Die Seitenleiste
+   * steht ausgeklappt links außerhalb des Bildes und der Umschalter braucht
+   * ein Skript. Inhalte und Formulare funktionierten bereits ohne JS — die
+   * Navigation nicht. Hier wird sie stattdessen fest in den Seitenfluss
+   * gestellt, oberhalb des Inhalts.
+   */
+  .no-js .sidebar {
+    position: static;
+    transform: none;
+    width: 100%;
+    box-shadow: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .no-js .sidebar-toggle,
+  .no-js .sidebar-backdrop { display: none; }
+  .no-js .app-shell { display: block; }
+}
+
+/* Wird von theme-init.js sofort entfernt; greift also nur ohne JavaScript. */
+.no-js .js-only { display: none; }
+
+/* ---------- Raumplanung: Ziehen ---------- */
+
+/* Ziehbare Ausstellerkarte. `pan-y` lässt vertikales Scrollen zu, solange
+   nicht gezogen wird — beim Halten schaltet das Skript auf `none` um. */
+[data-exhibitor][draggable="true"] {
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+[data-exhibitor][draggable="true"]:active { cursor: grabbing; }
+
+/* Karte, die gerade am Finger hängt: bleibt als blasser Platzhalter stehen. */
+[data-exhibitor].is-dragging {
+  opacity: .4;
+  border-style: dashed;
+}
+
+/* Die schwebende Kopie, die der Bewegung folgt. */
+.drag-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  opacity: .95;
+  transform: scale(1.03);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+/* Kurz nach dem Ablegen, bis die Seite die neue Zuteilung frisch rendert. */
+[data-exhibitor].is-saving {
+  opacity: .5;
+  pointer-events: none;
+}
+
+/* Auf der Räume-Übersicht sind die nicht zugeteilten Aussteller Chips —
+   sie sollen genauso anfassbar wirken wie die Karten in der Raumplanung. */
+.badge[data-exhibitor][draggable="true"] {
+  gap: .3rem;
+  padding-right: .6rem;
+}
+
+/* Greif-Symbol: macht sichtbar, dass die Karte angefasst werden kann. */
+.drag-grip {
+  color: var(--ink-faint);
+  font-size: 1.05rem;
+  line-height: 1;
+  letter-spacing: -.1em;
+  cursor: grab;
+  flex: none;
+}
+
+/* Ablagefläche unter dem Finger bzw. Mauszeiger. */
+[data-room].is-drop-target {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  background: var(--primary-soft, var(--surface-2));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drag-ghost { transform: none; }
 }
 
 /* ---------- Druck ---------- */

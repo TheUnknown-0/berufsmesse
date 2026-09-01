@@ -26,7 +26,13 @@ final class QrService
     private const TOKEN_LENGTH = 12;
 
     /** Rate-Limit: max. Fehlversuche je Zeitfenster (User ODER IP). */
+    /** Fehlversuche je Konto im Zeitfenster. */
     private const MAX_FAILS = 30;
+
+    /** Fehlversuche je IP im Zeitfenster — bewusst hoch, weil eine ganze
+     *  Schule hinter einer Adresse scannt (siehe isRateLimited()). */
+    private const MAX_FAILS_PER_IP = 300;
+
     private const WINDOW_SECONDS = 60;
 
     /** Standard-Zeitpuffer in Minuten (siehe ARCHITECTURE.md). */
@@ -316,7 +322,13 @@ final class QrService
      * @param bool                 $teacher Lehrer-Scan (großzügigeres Fenster)
      * @return string|null Fehlermeldung oder null, wenn gültig.
      */
-    public function windowError(array $slot, int $editionId, bool $teacher = false): ?string
+    /**
+     * @param int|null $at Bezugszeitpunkt (Unix-Zeit). Für nachgetragene
+     *                     Offline-Scans der Zeitpunkt der ERFASSUNG, nicht der
+     *                     des Nachsendens — sonst verwirft der Server genau die
+     *                     Scans, für die der Offline-Puffer gebaut wurde.
+     */
+    public function windowError(array $slot, int $editionId, bool $teacher = false, ?int $at = null): ?string
     {
         $edition = $this->edition($editionId);
         if ($edition === null) {
@@ -355,7 +367,7 @@ final class QrService
             $teacher ? self::DEFAULT_TEACHER_AFTER : self::DEFAULT_AFTER,
         );
 
-        $now = time();
+        $now = $at ?? time();
         if ($now < $start - $before * 60) {
             return 'Der Check-in für diesen Zeitslot ist noch nicht möglich. Bitte kurz vor Slotbeginn erneut versuchen.';
         }
@@ -368,21 +380,38 @@ final class QrService
 
     // ------------------------------------------------------------ Rate-Limit
 
-    /** Zu viele Fehlversuche in den letzten 60 Sekunden (je User ODER IP)? */
+    /**
+     * Zu viele Fehlversuche in den letzten 60 Sekunden?
+     *
+     * Konto und IP werden GETRENNT gezählt. Eine gemeinsame Grenze wäre am
+     * Messetag fatal: Eine Schule hängt hinter einer einzigen öffentlichen
+     * Adresse, und abgelaufene Zeitfenster oder falsche Räume erzeugen morgens
+     * schnell Dutzende Fehlversuche — mit einer ODER-Verknüpfung könnte danach
+     * niemand mehr einchecken.
+     */
     public function isRateLimited(?int $userId, string $ip): bool
     {
         // Das Zeitfenster ist eine Klassenkonstante (kein Request-Wert); MySQL
         // erlaubt in INTERVAL keinen Platzhalter, daher hier fest eingesetzt.
+        if ($userId !== null && $this->failsSince('user_id <=> ?', $userId) >= self::MAX_FAILS) {
+            return true;
+        }
+
+        return $this->failsSince('ip_address = ?', $ip) >= self::MAX_FAILS_PER_IP;
+    }
+
+    private function failsSince(string $condition, mixed $value): int
+    {
         $sql = sprintf(
             'SELECT COUNT(*) FROM checkin_attempts
              WHERE success = 0
                AND attempted_at > (NOW() - INTERVAL %d SECOND)
-               AND (user_id <=> ? OR ip_address = ?)',
+               AND %s',
             self::WINDOW_SECONDS,
+            $condition,
         );
-        $count = $this->db->fetchValue($sql, [$userId, $ip]);
 
-        return (int) $count >= self::MAX_FAILS;
+        return (int) $this->db->fetchValue($sql, [$value]);
     }
 
     /** Protokolliert einen Check-in-Versuch (Grundlage des Rate-Limits). */
@@ -392,22 +421,24 @@ final class QrService
             'INSERT INTO checkin_attempts (user_id, ip_address, success) VALUES (?, ?, ?)',
             [$userId, $ip, $success ? 1 : 0],
         );
+        // Gelegentliches Aufräumen (wie bei den Login-Versuchen), sonst wächst
+        // die Tabelle über die Jahre unbegrenzt.
+        if (random_int(1, 100) === 1) {
+            $this->db->run('DELETE FROM checkin_attempts WHERE attempted_at < (NOW() - INTERVAL 7 DAY)');
+        }
     }
 
     // ------------------------------------------------------------------- URL
 
     /**
      * Im QR-Code kodierte Check-in-URL.
-     * Basis aus Setting `qr_code_url`; ist sie leer, wird $fallbackBase
-     * (aus dem Request-Host gebaut) verwendet.
+     *
+     * Die Basis kommt vom Aufrufer (Context::publicBase()) — bewusst nicht
+     * mehr aus einem eigenen Setting: QR-Codes und Einladungslinks führen an
+     * dieselbe Anwendung und dürfen nicht auseinanderlaufen.
      */
-    public function checkinUrl(?int $schoolId, string $schoolSlug, string $token, string $fallbackBase): string
+    public function checkinUrl(string $schoolSlug, string $token, string $base): string
     {
-        $base = trim((string) ($this->settings->get('qr_code_url', $schoolId) ?? ''));
-        if ($base === '') {
-            $base = $fallbackBase;
-        }
-
         return rtrim($base, '/') . '/' . rawurlencode($schoolSlug) . '/checkin?token=' . rawurlencode($token);
     }
 

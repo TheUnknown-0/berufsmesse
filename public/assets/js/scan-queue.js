@@ -52,10 +52,29 @@
         write(items);
     }
 
+    /** Nach so vielen Fehlversuchen rutscht ein Eintrag ans Ende der Schlange,
+     *  damit ein einzelner Problemfall die übrigen Scans nicht blockiert. */
+    var MAX_TRIES = 8;
+
+    /** Eintrag stehen lassen und Versuch zählen (bzw. hinten anstellen). */
+    function retainFirst() {
+        var current = read();
+        if (!current.length) { return; }
+        current[0].tries = (current[0].tries || 0) + 1;
+        if (current[0].tries >= MAX_TRIES && current.length > 1) {
+            current.push(current.shift());
+        }
+        write(current);
+    }
+
     /**
-     * Warteschlange abarbeiten. Ein Eintrag fliegt raus, wenn der Server
-     * geantwortet hat — auch bei fachlicher Ablehnung, denn ein zweiter
-     * Versuch würde daran nichts ändern.
+     * Warteschlange abarbeiten.
+     *
+     * Ein Eintrag fliegt NUR raus, wenn der Server ihn fachlich beantwortet hat
+     * — also mit einer regulären JSON-Antwort. Bei Netzfehler, HTTP-Fehler,
+     * abgelaufener Sitzung oder einer HTML-Seite statt JSON bleibt er stehen:
+     * Ein gescannter Check-in darf nicht verloren gehen, nur weil gerade etwas
+     * anderes kaputt ist.
      */
     function flush() {
         if (flushing) { return Promise.resolve(); }
@@ -70,21 +89,27 @@
         });
 
         return window.BM.fetchJson(entry.url, { json: body }).then(function (data) {
+            // Keine verwertbare Antwort → aufheben und später erneut versuchen.
+            if (!data || data.transient === true || data.httpOk === false) {
+                retainFirst();
+                flushing = false;
+                if (data && data.httpStatus === 401) {
+                    window.BM.flash('warning', 'Anmeldung abgelaufen — bitte neu anmelden. Die Scans bleiben gespeichert.');
+                }
+                return null;
+            }
+
             var rest = read().slice(1);
             write(rest);
             flushing = false;
 
-            if (data && data.success === false && data.error) {
+            if (data.success === false && data.error) {
                 window.BM.flash('warning', 'Nachgetragener Scan abgelehnt: ' + data.error);
             }
             return rest.length ? flush() : null;
         }).catch(function () {
             // Weiterhin kein Netz — Eintrag bleibt stehen, Versuch zählen.
-            var current = read();
-            if (current.length) {
-                current[0].tries = (current[0].tries || 0) + 1;
-                write(current);
-            }
+            retainFirst();
             flushing = false;
         });
     }

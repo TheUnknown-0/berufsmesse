@@ -157,21 +157,52 @@ final class TeacherScanController extends Controller
         $studentName = trim((string) $student['firstname'] . ' ' . (string) $student['lastname']);
         $studentClass = (string) ($student['class'] ?? '');
 
-        $windowError = $qr->windowError($slot, $editionId, true);
+        // Nachgetragene Offline-Scans behalten ihren echten Erfassungszeitpunkt —
+        // er entscheidet auch über das Zeitfenster, sonst wird beim Nachsenden
+        // alles verworfen, was während des Netzausfalls gescannt wurde.
+        $recordedAt = $this->offlineTimestamp($input['offline_recorded_at'] ?? null);
+        $windowReference = $recordedAt !== null ? strtotime($recordedAt) : null;
+
+        $windowError = $qr->windowError($slot, $editionId, true, $windowReference ?: null);
         if ($windowError !== null) {
             $qr->recordAttempt($teacherId, $ip, false);
 
             return $this->jsonError($windowError);
         }
 
-        $exhibitor = $this->ctx->db->fetchOne(
+        // Sind mehrere Aussteller im Raum, lässt sich der Scan nicht eindeutig
+        // zuordnen. Früher gewann stillschweigend der alphabetisch erste —
+        // sämtliche Check-ins des zweiten landeten beim ersten.
+        $imRaum = $this->ctx->db->fetchAll(
             'SELECT id, name FROM exhibitors
              WHERE room_id = ? AND edition_id = ? AND active = 1
-             ORDER BY name LIMIT 1',
+             ORDER BY name',
             [$roomId, $editionId],
         );
-        if ($exhibitor === null) {
+        if ($imRaum === []) {
             return $this->jsonError('Diesem Raum ist kein aktiver Aussteller zugeordnet.');
+        }
+        if (count($imRaum) > 1) {
+            $gewaehlt = (int) ($input['exhibitor_id'] ?? 0);
+            $treffer = array_values(array_filter(
+                $imRaum,
+                static fn (array $e): bool => (int) $e['id'] === $gewaehlt,
+            ));
+            if ($treffer === []) {
+                $qr->recordAttempt($teacherId, $ip, false);
+
+                return [
+                    'success' => false,
+                    'error' => 'In diesem Raum sind mehrere Aussteller eingetragen. Bitte auswählen, für wen der Check-in gilt.',
+                    'choices' => array_map(
+                        static fn (array $e): array => ['id' => (int) $e['id'], 'name' => (string) $e['name']],
+                        $imRaum,
+                    ),
+                ];
+            }
+            $exhibitor = $treffer[0];
+        } else {
+            $exhibitor = $imRaum[0];
         }
         $exhibitorId = (int) $exhibitor['id'];
         $exhibitorName = (string) $exhibitor['name'];
@@ -238,9 +269,6 @@ final class TeacherScanController extends Controller
                 $wrongRoom = true;
             }
         }
-
-        // Nachgetragene Offline-Scans behalten ihren echten Erfassungszeitpunkt.
-        $recordedAt = $this->offlineTimestamp($input['offline_recorded_at'] ?? null);
 
         $attendance->recordCheckin(
             $editionId,
@@ -323,16 +351,17 @@ final class TeacherScanController extends Controller
             return $this->jsonError('Raum oder Zeitslot gehört nicht zu dieser Messe.');
         }
 
-        $exhibitor = $this->ctx->db->fetchOne(
+        $imRaum = $this->ctx->db->fetchAll(
             'SELECT id, name FROM exhibitors
              WHERE room_id = ? AND edition_id = ? AND active = 1
-             ORDER BY name LIMIT 1',
+             ORDER BY name',
             [$roomId, $editionId],
         );
-        if ($exhibitor === null) {
+        if ($imRaum === []) {
             return [
                 'success' => true,
                 'exhibitor' => null,
+                'choices' => [],
                 'room' => AttendanceService::roomLabel($room['room_number'] ?? null, $room['room_name'] ?? null),
                 'present' => [],
                 'missing' => [],
@@ -340,6 +369,18 @@ final class TeacherScanController extends Controller
                 'expected_count' => 0,
             ];
         }
+
+        // Bei mehreren Ausstellern im Raum entscheidet die Auswahl der Lehrkraft.
+        $choices = array_map(
+            static fn (array $e): array => ['id' => (int) $e['id'], 'name' => (string) $e['name']],
+            $imRaum,
+        );
+        $gewaehlt = (int) ($_GET['exhibitor_id'] ?? 0);
+        $treffer = array_values(array_filter(
+            $imRaum,
+            static fn (array $e): bool => (int) $e['id'] === $gewaehlt,
+        ));
+        $exhibitor = $treffer !== [] ? $treffer[0] : $imRaum[0];
         $exhibitorId = (int) $exhibitor['id'];
 
         $presentRows = $this->ctx->db->fetchAll(
@@ -390,6 +431,9 @@ final class TeacherScanController extends Controller
         return [
             'success' => true,
             'exhibitor' => (string) $exhibitor['name'],
+            'exhibitor_id' => $exhibitorId,
+            // Mehr als ein Eintrag: Die Oberfläche muss auswählen lassen.
+            'choices' => $choices,
             'room' => AttendanceService::roomLabel($room['room_number'] ?? null, $room['room_name'] ?? null),
             'present' => $present,
             'missing' => $missing,
@@ -414,17 +458,5 @@ final class TeacherScanController extends Controller
         }
 
         return $user;
-    }
-
-    /** @return array<string, mixed> JSON-Body des Requests. */
-    private function jsonInput(): array
-    {
-        $raw = file_get_contents('php://input');
-        if ($raw === false || $raw === '') {
-            return $_POST;
-        }
-        $data = json_decode($raw, true);
-
-        return is_array($data) ? $data : $_POST;
     }
 }

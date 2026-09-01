@@ -166,11 +166,16 @@ final class CancellationService
             return array_map(static fn (array $r): int => (int) $r['user_id'], $students);
         });
 
+        // Bei geschlossener Einschreibung passiert NICHTS von selbst: Ein
+        // Ersatzplatz entsteht erst, wenn die Organisation den Auffüll-Lauf
+        // startet. Vorher versprach die Meldung eine automatische Zuteilung —
+        // Schüler:innen verließen sich darauf und standen ohne Termin da.
         $registrationOpen = $this->registrationOpen($edition);
         $message = 'Der Aussteller „' . $exhibitor['name'] . '" hat abgesagt. Deine Anmeldung wurde entfernt. '
             . ($registrationOpen
                 ? 'Bitte wähle einen neuen Aussteller.'
-                : 'Du wirst automatisch einem anderen Aussteller zugeteilt.');
+                : 'Die Organisation prüft, ob ein Ersatzplatz möglich ist, und meldet sich. '
+                    . 'Bitte sieh in deinem Tagesplan nach, ob der Termin ersetzt wurde.');
 
         $this->notifications->sendMany(
             $affected,

@@ -111,8 +111,15 @@ final class AttendanceService
             return 'Du bist in diesem Zeitslot bereits bei ' . (string) $other['exhibitor_name'] . ' eingetragen.';
         }
 
+        // Kapazität 0 heißt GESPERRT, nicht „unbegrenzt“ — dieselbe Lesart wie
+        // in Capacity::hasFree(). Vorher galt 0 hier als unbegrenzt, sodass ein
+        // bewusst gesperrter Slot über den Check-in beliebig gefüllt werden
+        // konnte, während die Zuteilung ihn korrekt ausließ.
         $capacity = $this->slotCapacity($exhibitorId, $roomId, $timeslotId);
-        if ($capacity > 0 && $this->registrationCount($exhibitorId, $timeslotId, $editionId) >= $capacity) {
+        if ($capacity <= 0) {
+            return 'Für diesen Zeitslot ist bei diesem Aussteller kein Platz vorgesehen.';
+        }
+        if ($this->registrationCount($exhibitorId, $timeslotId, $editionId) >= $capacity) {
             return 'Dieser Aussteller ist in diesem Zeitslot bereits voll belegt.';
         }
 

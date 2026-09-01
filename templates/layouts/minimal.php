@@ -18,7 +18,7 @@ $wrapStyle = $loginImage !== null
       e($ctx->url('/medien/branding/' . $loginImage)) . ') center/cover no-repeat;'
     : '';
 ?><!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="no-js">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

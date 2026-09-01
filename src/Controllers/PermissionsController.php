@@ -311,7 +311,13 @@ final class PermissionsController extends Controller
                 'INSERT INTO permission_groups (school_id, name, description, created_by) VALUES (?, ?, ?, ?)',
                 [$schoolId, $name, $description, $this->ctx->auth->id()],
             );
-        } catch (PDOException) {
+        } catch (PDOException $e) {
+            // Nur der Verstoss gegen den UNIQUE-Index bedeutet "Name vergeben".
+            // Jeder andere Datenbankfehler wurde vorher genauso gemeldet und
+            // damit als harmlose Eingabemeldung getarnt.
+            if (($e->errorInfo[1] ?? 0) !== 1062) {
+                throw $e;
+            }
             $this->flash('error', 'Es gibt bereits eine Gruppe mit diesem Namen.');
             $this->redirect($back);
         }
@@ -383,7 +389,13 @@ final class PermissionsController extends Controller
                 'UPDATE permission_groups SET name = ?, description = ? WHERE id = ? AND school_id = ?',
                 [$name, $description, $groupId, $schoolId],
             );
-        } catch (PDOException) {
+        } catch (PDOException $e) {
+            // Nur der Verstoss gegen den UNIQUE-Index bedeutet "Name vergeben".
+            // Jeder andere Datenbankfehler wurde vorher genauso gemeldet und
+            // damit als harmlose Eingabemeldung getarnt.
+            if (($e->errorInfo[1] ?? 0) !== 1062) {
+                throw $e;
+            }
             $this->flash('error', 'Es gibt bereits eine Gruppe mit diesem Namen.');
             $this->redirect($back);
         }

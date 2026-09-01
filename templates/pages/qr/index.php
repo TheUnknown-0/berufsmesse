@@ -2,7 +2,7 @@
 /**
  * QR-Code-Matrix: Aussteller × Zeitslots (ohne Pausen) mit Token-Status.
  * Erwartet: $slots, $exhibitors, $tokens, $tokenCount, $expectedCount,
- *           $canCreate, $canSeeStudents, $qrBase, $schoolSlug, $edition
+ *           $canCreate, $canSeeStudents, $qrBase, $baseIsGuessed, $schoolSlug, $edition
  */
 $imgBase = $ctx->schoolUrl('/api/qr/bild');
 ?>
@@ -64,12 +64,19 @@ $imgBase = $ctx->schoolUrl('/api/qr/bild');
         <div>Für diese Messe fehlen noch Zeitslots oder aktive Aussteller. Lege diese zuerst an.</div>
     </div>
 <?php else: ?>
-    <div class="alert alert-info">
-        <span>ℹ️</span>
+    <div class="alert <?= $baseIsGuessed ? 'alert-warning' : 'alert-info' ?>">
+        <span><?= $baseIsGuessed ? '⚠️' : 'ℹ️' ?></span>
         <div>
             Im QR-Code steckt die Adresse
             <span class="mono"><?= e(rtrim($qrBase, '/') . '/' . $schoolSlug . '/checkin?token=…') ?></span>.
-            Die Basis lässt sich in den Einstellungen über <span class="mono">qr_code_url</span> festlegen.
+            <?php if ($baseIsGuessed): ?>
+                Diese Adresse ist aus dem aktuellen Aufruf geraten und kann auf den
+                gedruckten Codes falsch landen. Vor dem Druck bitte unter
+                <span class="mono">Global-Admin → Einstellungen</span> die Adresse
+                eintragen, unter der die Anwendung von außen erreichbar ist.
+            <?php else: ?>
+                Sie stammt aus der hinterlegten öffentlichen Adresse der Anwendung.
+            <?php endif; ?>
         </div>
     </div>
 <?php endif; ?>

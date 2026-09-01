@@ -404,16 +404,4 @@ final class AttendanceController extends Controller
             'topExhibitors' => $topExhibitors,
         ]);
     }
-
-    /** @return array<string, mixed> JSON-Body des Requests. */
-    private function jsonInput(): array
-    {
-        $raw = file_get_contents('php://input');
-        if ($raw === false || $raw === '') {
-            return $_POST;
-        }
-        $data = json_decode($raw, true);
-
-        return is_array($data) ? $data : $_POST;
-    }
 }

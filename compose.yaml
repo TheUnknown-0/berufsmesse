@@ -1,6 +1,9 @@
 services:
   db:
     image: mariadb:11.4
+    # Ohne Restart-Policy startet die Datenbank nach einem Host-Neustart nicht
+    # wieder mit — die App liefe dann ins Leere.
+    restart: unless-stopped
     environment:
       TZ: Europe/Berlin
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
@@ -14,6 +17,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   app:
     build: .
@@ -27,16 +35,34 @@ services:
       DB_NAME: ${DB_NAME:-berufsmesse}
       APP_ENV: ${APP_ENV:-production}
       BASE_URL: ${BASE_URL:-/}
+      # Wie lange der Start auf die Datenbank wartet, bevor er aufgibt.
+      DB_WAIT_TIMEOUT: ${DB_WAIT_TIMEOUT:-120}
+      # Nur diese Adressen dürfen X-Forwarded-For setzen. Leer = niemand.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     volumes:
       - uploads:/var/www/html/uploads
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    # Ohne eigenen Healthcheck bleibt der Zustand „Container läuft, Anwendung
+    # antwortet nicht“ von außen unsichtbar.
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/healthz') === 'ok' ? 0 : 1);"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   phpmyadmin:
     image: phpmyadmin:latest
     profiles: ["tools"]
+    restart: unless-stopped
     ports:
       - "${PMA_PORT:-8080}:80"
     environment:

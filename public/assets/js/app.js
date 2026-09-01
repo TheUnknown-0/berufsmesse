@@ -36,8 +36,25 @@
             delete options.json;
         }
         return fetch(url, options).then(function (res) {
-            return res.json().catch(function () {
-                return { success: false, error: 'Unerwartete Antwort vom Server (HTTP ' + res.status + ').' };
+            return res.json().then(function (data) {
+                // Statuscode mitgeben: Aufrufer müssen eine fachliche Ablehnung
+                // (HTTP 200 mit success:false) von einer Störung unterscheiden
+                // können — der Offline-Puffer hängt davon ab.
+                if (data && typeof data === 'object') {
+                    data.httpStatus = res.status;
+                    data.httpOk = res.ok;
+                }
+                return data;
+            }, function () {
+                // Keine JSON-Antwort: Anmeldeseite, Proxy-Fehlerseite, Timeout.
+                // Das ist KEINE fachliche Ablehnung.
+                return {
+                    success: false,
+                    transient: true,
+                    httpStatus: res.status,
+                    httpOk: res.ok,
+                    error: 'Unerwartete Antwort vom Server (HTTP ' + res.status + ').'
+                };
             });
         });
     }

@@ -50,6 +50,8 @@ final class RoomsController extends Controller
             'assigned' => $assigned,
             'unassigned' => $unassigned,
             'exhibitorCount' => count($exhibitors),
+            // Zuteilen per Ziehen — dieselbe Bedienung wie in der Raumplanung.
+            'pageScripts' => ['room-plan.js'],
         ]);
     }
 
@@ -167,23 +169,71 @@ final class RoomsController extends Controller
         $exhibitor = $this->findExhibitor((int) ($_POST['exhibitor_id'] ?? 0));
         $roomId = (int) ($_POST['room_id'] ?? 0);
         $room = $roomId > 0 ? $this->findRoom($roomId) : null;
+        $editionId = (int) $edition['id'];
+        $back = $this->ctx->schoolUrl('/admin/raeume');
+
+        $hinweise = [];
+        if ($room !== null) {
+            // Ein zweiter Aussteller im selben Raum verdoppelt faktisch dessen
+            // Kapazität — und der Lehrer-Scanner kann die beiden im Raum nicht
+            // auseinanderhalten, weil er nur über den Raum auflöst.
+            $mitbewohner = $this->ctx->db->fetchAll(
+                'SELECT name FROM exhibitors
+                 WHERE room_id = ? AND edition_id = ? AND id <> ? AND active = 1
+                 ORDER BY name',
+                [(int) $room['id'], $editionId, (int) $exhibitor['id']],
+            );
+            if ($mitbewohner !== []) {
+                $hinweise[] = sprintf(
+                    'Achtung: In diesem Raum ist bereits %s eingetragen. Check-in-Scans lassen sich dann nicht mehr eindeutig zuordnen.',
+                    implode(', ', array_column($mitbewohner, 'name')),
+                );
+            }
+
+            // Passt die bereits erfolgte Zuteilung noch in den neuen Raum?
+            $ueberbucht = $this->ctx->db->fetchOne(
+                'SELECT r.timeslot_id, COUNT(*) AS belegt,
+                        COALESCE(rsc.capacity, ro.capacity) AS kapazitaet
+                 FROM registrations r
+                 JOIN rooms ro ON ro.id = ?
+                 LEFT JOIN room_slot_capacities rsc
+                        ON rsc.room_id = ro.id AND rsc.timeslot_id = r.timeslot_id
+                 WHERE r.exhibitor_id = ? AND r.edition_id = ? AND r.timeslot_id IS NOT NULL
+                 GROUP BY r.timeslot_id, kapazitaet
+                 HAVING kapazitaet IS NOT NULL AND belegt > kapazitaet
+                 ORDER BY belegt DESC
+                 LIMIT 1',
+                [(int) $room['id'], (int) $exhibitor['id'], $editionId],
+            );
+            if ($ueberbucht !== null) {
+                $hinweise[] = sprintf(
+                    'Achtung: In mindestens einem Zeitslot sind bereits %d Personen zugeteilt, der Raum fasst aber nur %d. Bitte Zuteilung prüfen.',
+                    (int) $ueberbucht['belegt'],
+                    (int) $ueberbucht['kapazitaet'],
+                );
+            }
+        }
 
         $this->ctx->db->run(
             'UPDATE exhibitors SET room_id = ? WHERE id = ? AND edition_id = ?',
-            [$room === null ? null : (int) $room['id'], (int) $exhibitor['id'], (int) $edition['id']],
+            [$room === null ? null : (int) $room['id'], (int) $exhibitor['id'], $editionId],
         );
 
         $this->ctx->audit->log(
             'Raum zugeteilt',
-            'info',
+            $hinweise === [] ? 'info' : 'warning',
             'Aussteller: ' . (string) $exhibitor['name']
-                . ' → ' . ($room === null ? 'kein Raum' : 'Raum ' . (string) $room['room_number']),
+                . ' → ' . ($room === null ? 'kein Raum' : 'Raum ' . (string) $room['room_number'])
+                . ($hinweise === [] ? '' : ' — ' . implode(' ', $hinweise)),
             $this->ctx->schoolId(),
         );
         $this->flash('success', $room === null
             ? 'Die Zuteilung wurde gelöst.'
             : 'Der Aussteller wurde dem Raum zugewiesen.');
-        $this->redirect($this->ctx->schoolUrl('/admin/raeume'));
+        foreach ($hinweise as $hinweis) {
+            $this->flash('warning', $hinweis);
+        }
+        $this->redirect($back);
     }
 
     /** POST /{school}/admin/raeume/zuteilung-loesen */

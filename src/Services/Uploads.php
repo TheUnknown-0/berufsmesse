@@ -108,6 +108,38 @@ final class Uploads
         }
     }
 
+    /**
+     * Löscht ein Ausstellerlogo nur, wenn kein anderer Datensatz es noch nutzt.
+     *
+     * Beim Klonen einer Edition wird der Dateiname übernommen, nicht die Datei.
+     * Zwei Editionen zeigen danach auf dasselbe Bild — löschte man es beim
+     * Austausch im aktuellen Jahr, zeigte die Vorjahres-Edition ein totes Bild.
+     *
+     * @param int $exceptExhibitorId Datensatz, der gerade geändert wird und
+     *                               deshalb nicht als Nutzer zählt.
+     */
+    public function deleteLogoIfUnused(Database $db, ?string $filename, int $exceptExhibitorId): void
+    {
+        if (!is_string($filename) || $filename === '') {
+            return;
+        }
+
+        $nochGenutzt = $db->fetchValue(
+            'SELECT 1 FROM exhibitors WHERE logo = ? AND id <> ? LIMIT 1',
+            [$filename, $exceptExhibitorId],
+        );
+        if ($nochGenutzt !== null) {
+            return;
+        }
+
+        $auchAlsSchullogo = $db->fetchValue('SELECT 1 FROM schools WHERE logo = ? LIMIT 1', [$filename]);
+        if ($auchAlsSchullogo !== null) {
+            return;
+        }
+
+        $this->delete('logos', $filename);
+    }
+
     /** Streamt eine Datei mit korrektem Content-Type an den Browser. */
     public function stream(string $subdir, string $filename, ?string $downloadName = null): never
     {

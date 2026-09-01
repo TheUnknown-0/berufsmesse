@@ -16,6 +16,14 @@ RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \
 
 COPY . /var/www/html/
 
+# Eigene PHP-Einstellungen (Sitzungsdauer, Upload-Grenzen) — siehe config/php.ini
+COPY config/php.ini /usr/local/etc/php/conf.d/berufsmesse.ini
+
+# Sitzungen in einem eigenen Verzeichnis statt im flüchtigen /tmp.
+RUN mkdir -p /var/lib/php/sessions \
+    && chown www-data:www-data /var/lib/php/sessions \
+    && chmod 700 /var/lib/php/sessions
+
 RUN chown -R www-data:www-data /var/www/html/uploads
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

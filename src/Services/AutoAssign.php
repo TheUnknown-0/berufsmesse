@@ -80,9 +80,15 @@ final class AutoAssign
             }
 
             $pending = $this->db->fetchAll(
-                'SELECT id, user_id, exhibitor_id FROM registrations
-                 WHERE edition_id = ? AND timeslot_id IS NULL
-                 ORDER BY priority IS NULL, priority ASC, registered_at ASC, id ASC',
+                // Nur aktive Aussteller: Ein abgesagter Aussteller behält seine
+                // offenen Wünsche (Rebooking bucht nur ZUGETEILTE Anmeldungen um).
+                // Ohne diesen Filter würden Schüler:innen bei einem erneuten Lauf
+                // genau dem Aussteller zugeteilt, der abgesagt hat.
+                'SELECT r.id, r.user_id, r.exhibitor_id
+                 FROM registrations r
+                 JOIN exhibitors e ON e.id = r.exhibitor_id AND e.active = 1
+                 WHERE r.edition_id = ? AND r.timeslot_id IS NULL
+                 ORDER BY r.priority IS NULL, r.priority ASC, r.registered_at ASC, r.id ASC',
                 [$editionId],
             );
 
@@ -328,10 +334,21 @@ final class AutoAssign
         $full = 0;
         $partial = 0;
         if ($slotCount > 0) {
+            // Nur FESTE Slots zählen. Sonst werden Check-ins in freien Slots
+            // (registration_type = qr_checkin) mitgezählt und gegen die Zahl
+            // der festen Slots verglichen — ein Tagesplan gälte dann als voll,
+            // obwohl ein fester Slot leer ist. Vor der Messe fiel das nicht
+            // auf, weil es noch keine Check-ins gibt.
+            // COUNT(t.id) statt COUNT(r.id): gezählt werden nur Zuteilungen in
+            // festen Slots. Schüler:innen bleiben dabei in der Auswertung,
+            // auch wenn sie ausschließlich Check-ins in freien Slots haben.
             $counts = $this->db->fetchAll(
-                "SELECT u.id, COUNT(r.id) AS belegt
+                "SELECT u.id, COUNT(t.id) AS belegt
                  FROM users u
-                 LEFT JOIN registrations r ON r.user_id = u.id AND r.edition_id = ? AND r.timeslot_id IS NOT NULL
+                 LEFT JOIN registrations r
+                        ON r.user_id = u.id AND r.edition_id = ? AND r.timeslot_id IS NOT NULL
+                 LEFT JOIN timeslots t
+                        ON t.id = r.timeslot_id AND t.is_managed = 1 AND t.is_break = 0
                  WHERE u.role = 'student' AND u.school_id = ? AND u.edition_id = ?
                  GROUP BY u.id",
                 [$editionId, $schoolId, $editionId],

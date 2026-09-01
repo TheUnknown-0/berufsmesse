@@ -16,6 +16,12 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
     return $view->renderPartial('pages/rooms/fields', ['room' => $room, 'prefix' => $prefix]);
 };
 ?>
+<?php /* Wurzel für room-plan.js. data-reload: Die Auswahllisten unten sind
+       statisch gerendert und müssen nach einem Zug neu aufgebaut werden. */ ?>
+<div data-roomplan
+     data-assign-url="<?= e($ctx->schoolUrl('/api/raumplan/zuteilen')) ?>"
+     data-reload="1"></div>
+
 <div class="page-header">
     <div class="page-title-group">
         <div class="page-eyebrow">Verwaltung</div>
@@ -61,12 +67,20 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
 
 <?php elseif ($blockKey === 'ohne-raum'): ?>
 <?php if ($unassigned !== []): ?>
-    <div class="alert alert-warning">
-        <div>
+    <div class="alert alert-warning" data-room="0">
+        <div style="flex:1;">
             <strong>Noch nicht zugeordnet</strong>
-            <div class="chip-row mt-2">
+            <?php if ($canEdit): ?>
+                <div class="text-sm text-soft">
+                    Auf einen Raum ziehen — am Touchscreen kurz halten, dann ziehen.
+                    Zum Lösen wieder hierher zurückziehen.
+                </div>
+            <?php endif; ?>
+            <div class="chip-row mt-2" data-room-list="0">
                 <?php foreach ($unassigned as $exhibitor): ?>
-                    <span class="badge<?= (int) $exhibitor['active'] === 1 ? ' badge-warning' : '' ?>">
+                    <span class="badge<?= (int) $exhibitor['active'] === 1 ? ' badge-warning' : '' ?>"
+                          data-exhibitor="<?= e((string) (int) $exhibitor['id']) ?>"<?= $canEdit ? ' draggable="true"' : '' ?>>
+                        <?php if ($canEdit): ?><span class="drag-grip" aria-hidden="true">⠿</span> <?php endif; ?>
                         <?= e($exhibitor['name']) ?><?= (int) $exhibitor['active'] === 1 ? '' : ' (inaktiv)' ?>
                     </span>
                 <?php endforeach; ?>
@@ -88,7 +102,7 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
             $roomId = (int) $room['id'];
             $inRoom = $assigned[$roomId] ?? [];
             ?>
-            <div class="card">
+            <div class="card" data-room="<?= e((string) $roomId) ?>">
                 <div class="card-header">
                     <h3>
                         <?= e($room['room_number']) ?>
@@ -96,7 +110,7 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
                             <span class="text-soft text-sm">· <?= e($room['room_name']) ?></span>
                         <?php endif; ?>
                     </h3>
-                    <span class="badge badge-info"><?= e((string) count($inRoom)) ?> Aussteller</span>
+                    <span class="badge badge-info"><span data-room-count="<?= e((string) $roomId) ?>"><?= e((string) count($inRoom)) ?></span> Aussteller</span>
                     <span class="badge">Kapazität <?= e((string) (int) $room['capacity']) ?></span>
                     <?php if ($canEdit): ?>
                         <button class="btn btn-sm" type="button" data-open-modal="room-edit-<?= e((string) $roomId) ?>">Bearbeiten</button>
@@ -116,12 +130,17 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
                         <?php if (!empty($room['equipment'])): ?> · 🔌 <?= e($room['equipment']) ?><?php endif; ?>
                     </p>
 
-                    <?php if ($inRoom === []): ?>
-                        <p class="text-faint">Diesem Raum ist noch kein Aussteller zugeordnet.</p>
-                    <?php else: ?>
-                        <div class="stack mb-2">
+                    <p class="text-faint" data-empty-hint<?= $inRoom === [] ? '' : ' hidden' ?>>
+                        <?= $canEdit
+                            ? 'Noch kein Aussteller — hierher ziehen.'
+                            : 'Diesem Raum ist noch kein Aussteller zugeordnet.' ?>
+                    </p>
+                    <div class="stack mb-2" data-room-list="<?= e((string) $roomId) ?>">
                             <?php foreach ($inRoom as $exhibitor): ?>
-                                <div class="cluster">
+                                <div class="cluster" data-exhibitor="<?= e((string) (int) $exhibitor['id']) ?>"<?= $canEdit ? ' draggable="true"' : '' ?>>
+                                    <?php if ($canEdit): ?>
+                                        <span class="drag-grip" aria-hidden="true" title="Zum Verschieben ziehen — am Touchscreen kurz halten">⠿</span>
+                                    <?php endif; ?>
                                     <span style="flex:1;min-width:160px;">
                                         <?= e($exhibitor['name']) ?>
                                         <?php if ((int) $exhibitor['active'] !== 1): ?>
@@ -138,8 +157,7 @@ $roomFields = static function (array $room, string $prefix) use ($view): string 
                                     <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
+                    </div>
 
                     <?php if ($canEdit && $unassigned !== []): ?>
                         <form method="post" class="cluster" action="<?= e($ctx->schoolUrl('/admin/raeume/zuteilen')) ?>">

@@ -221,10 +221,25 @@ final class AdminRegistrationsController extends Controller
             }
         }
 
+        $freedSlot = $registration['timeslot_id'] !== null ? (int) $registration['timeslot_id'] : null;
+
         $this->ctx->db->run(
             'UPDATE registrations SET timeslot_id = ? WHERE id = ? AND edition_id = ?',
             [$timeslotId, $registrationId, $editionId],
         );
+
+        // Der verlassene Slot wird frei — dort rückt jemand nach. Ohne diesen
+        // Aufruf bliebe der Platz trotz Warteliste leer (dieselbe Regel wie
+        // beim Entfernen einer Anmeldung).
+        $promoted = null;
+        if ($freedSlot !== null && $freedSlot !== $timeslotId) {
+            $promoted = $this->waitlist()->promote(
+                $editionId,
+                (int) $registration['exhibitor_id'],
+                $freedSlot,
+                $schoolId,
+            );
+        }
 
         $this->ctx->audit->log(
             'Zeitslot einer Anmeldung geändert',
@@ -239,7 +254,9 @@ final class AdminRegistrationsController extends Controller
             ),
             $schoolId,
         );
-        $this->flash('success', 'Zeitslot wurde aktualisiert.');
+        $this->flash('success', $promoted !== null
+            ? 'Zeitslot wurde aktualisiert. Der frei gewordene Platz ging an die/den nächste:n Wartende:n.'
+            : 'Zeitslot wurde aktualisiert.');
         $this->redirect($back);
     }
 

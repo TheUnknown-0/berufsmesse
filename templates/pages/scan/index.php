@@ -88,6 +88,8 @@
                     </select>
                 </div>
             </div>
+            <?php /* Erscheint nur, wenn sich mehrere Aussteller einen Raum teilen. */ ?>
+            <div class="form-row" id="scan-exhibitor-choice" hidden></div>
         </div>
 
         <div class="grid-2">

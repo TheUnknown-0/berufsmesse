@@ -5,3 +5,5 @@ vendor/
 .idea/
 .vscode/
 *.log
+tools/phpunit.phar
+.phpunit.cache/

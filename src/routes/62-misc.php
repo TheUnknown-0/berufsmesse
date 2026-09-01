@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 use App\Controllers\AnnouncementsController;
 use App\Controllers\AuditLogController;
+use App\Controllers\HealthController;
 use App\Controllers\NotificationsController;
 use App\Core\Router;
 
 /**
- * Ankündigungen, schulinternes Audit-Log und die Benachrichtigungs-API.
+ * Ankündigungen, schulinternes Audit-Log, Benachrichtigungs-API und die
+ * Betriebs-Endpunkte für Healthcheck und Monitoring.
  */
 return static function (Router $r): void {
+    // Betrieb: ohne Anmeldung erreichbar (Container-Healthcheck)
+    $r->get('/healthz', [HealthController::class, 'live']);
+    $r->get('/readyz', [HealthController::class, 'ready']);
+
     // Ankündigungen
     $r->get('/{school}/admin/ankuendigungen', [AnnouncementsController::class, 'index']);
     $r->post('/{school}/admin/ankuendigungen', [AnnouncementsController::class, 'store']);

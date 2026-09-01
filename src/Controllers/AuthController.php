@@ -71,7 +71,7 @@ final class AuthController extends Controller
             );
         }
 
-        $throttle->clear($username, $ip);
+        $throttle->clear($username);
         $this->ctx->auth->loginAs($user);
         $this->ctx->audit->log(
             'Login erfolgreich',
@@ -210,7 +210,7 @@ final class AuthController extends Controller
         // Rate-Limit gegen Massenregistrierung (gleiche Mechanik wie Login)
         $throttle = new LoginThrottle($this->ctx->db);
         $ip = Audit::clientIp();
-        if ($throttle->isBlocked('_register_', $ip)) {
+        if ($throttle->isIpBlocked($ip)) {
             $this->flash('error', 'Zu viele Registrierungen. Bitte warte einen Moment.');
             $this->redirect($back);
         }
@@ -233,7 +233,7 @@ final class AuthController extends Controller
             [$username, (int) $school['id']],
         );
         if ($exists !== null) {
-            $throttle->recordFailure('_register_', $ip);
+            $throttle->recordFailure(LoginThrottle::REGISTRATION_MARKER, $ip);
             $this->flash('error', 'Dieser Benutzername ist bereits vergeben.');
             $this->redirect($back);
         }

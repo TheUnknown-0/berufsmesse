@@ -347,6 +347,19 @@ final class RegistrationController extends Controller
         $user = $this->requireLogin();
 
         if ($user['role'] === 'student') {
+            // Konten früherer Editionen dürfen sich nicht in die laufende
+            // Messe einschreiben: Auffüll-Lauf und Auswertung filtern auf die
+            // Edition des Kontos, solche Anmeldungen tauchten dort nie auf und
+            // führten zu Zahlen, die nicht zusammenpassen.
+            $edition = $this->ctx->requireEdition();
+            $userEdition = $user['edition_id'] !== null ? (int) $user['edition_id'] : null;
+            if ($userEdition !== null && $userEdition !== (int) $edition['id']) {
+                throw new HttpException(
+                    403,
+                    'Dein Zugang gehört zu einer früheren Messe. Bitte wende dich an die Organisation.',
+                );
+            }
+
             return $user;
         }
         if (in_array($user['role'], ['admin', 'school_admin'], true)

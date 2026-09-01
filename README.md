@@ -36,12 +36,29 @@ phpMyAdmin (nur bei Bedarf): `docker compose --profile tools up -d` → Port 808
 | `APP_PORT` | `9000` | Host-Port |
 | `APP_ENV` | `production` | `development` zeigt Fehlerdetails |
 | `BASE_URL` | `/` | Basis-Pfad bei Betrieb im Unterverzeichnis |
-| `TRUSTED_PROXIES` | private Netze | CIDR-Liste für X-Forwarded-For |
+| `TRUSTED_PROXIES` | *(nur localhost)* | CIDR-Liste für X-Forwarded-For — **nur die eigenen Reverse-Proxys**, niemals ganze Netze (siehe `.env.example`) |
+| `DB_WAIT_TIMEOUT` | `120` | Sekunden, die der Start auf die Datenbank wartet |
 | `SECURE_COOKIES` | Auto | `1` erzwingt Secure-Flag (hinter HTTPS-Proxy) |
 
 ## Architektur
 
 Siehe [ARCHITECTURE.md](ARCHITECTURE.md) — Front-Controller (`public/index.php`), eigenes schlankes MVC unter `src/`, Templates unter `templates/`, versionierte Migrationen unter `migrations/` (laufen beim Container-Start automatisch). Keine externen Laufzeit-Abhängigkeiten: FPDF und QR-Erzeugung sind vendored (`lib/`), Fonts/JS-Bibliotheken liegen lokal (`public/assets/`) — die App läuft vollständig offline im Schulnetz und mit strikter Content-Security-Policy.
+
+## Betrieb
+
+Beide Container starten mit `restart: unless-stopped` und haben einen Healthcheck.
+Die Anwendung meldet ihren Zustand selbst:
+
+| Endpunkt | Bedeutung |
+|---|---|
+| `/healthz` | Die Anwendung antwortet. Bewusst auch bei Datenbankausfall `ok` — ein Neustart des Webservers behebt den nicht, und ein dauernd neu startender Container macht die Störung schlimmer. |
+| `/readyz` | Vollständig bedienbereit inklusive Datenbank. `200` = bereit, `503` = nicht. Der richtige Endpunkt für Monitoring und Lastverteiler. |
+
+Migrationen laufen beim Start, abgesichert über eine Datenbanksperre — zwei
+gleichzeitig startende Container können sich nicht ins Gehege kommen.
+Bricht eine Migration mitten in einer Datei ab, meldet der Start das
+ausdrücklich: Das Schema ist dann teilweise angewendet und muss von Hand
+geprüft werden.
 
 ## Backup
 
@@ -51,6 +68,26 @@ docker compose exec db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysqldump -u"$MYSQL_US
 # Uploads (Logos & Dokumente)
 docker run --rm -v berufsmesse_uploads:/data -v "$(pwd):/backup" alpine tar czf /backup/uploads.tar.gz -C /data .
 ```
+
+### Wiederherstellung
+
+Ein Backup, das nie zurückgespielt wurde, ist keins — einmal vor der Messe proben.
+
+```bash
+# Datenbank (Container laufen, Anwendung vorher stoppen)
+docker compose stop app
+docker compose exec -T db sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" "$MYSQL_DATABASE"' < backup.sql
+# Uploads
+docker run --rm -v berufsmesse_uploads:/data -v "$(pwd):/backup" alpine sh -c 'rm -rf /data/* && tar xzf /backup/uploads.tar.gz -C /data'
+docker compose start app
+# Prüfen
+curl -sf http://localhost:${APP_PORT:-9000}/readyz
+```
+
+## Tests
+
+Siehe [tests/README.md](tests/README.md). PHPUnit läuft als PHAR, damit die
+Anwendung ohne Composer auskommt.
 
 ## Lokale Entwicklung ohne Docker
 

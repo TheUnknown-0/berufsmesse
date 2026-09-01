@@ -48,7 +48,7 @@ final class Capacity
              LEFT JOIN rooms r ON r.id = e.room_id
              LEFT JOIN room_slot_capacities rsc
                     ON rsc.room_id = e.room_id AND rsc.timeslot_id = t.id
-             WHERE e.edition_id = ?',
+             WHERE e.edition_id = ? AND e.active = 1',
             [$editionId],
         );
         foreach ($rows as $row) {
