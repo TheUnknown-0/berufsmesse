@@ -43,6 +43,12 @@ services:
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     volumes:
       - uploads:/var/www/html/uploads
+    # "default" muss ausdruecklich dabeistehen: sobald ein Service eigene
+    # Netze nennt, faellt das implizite Standardnetz weg — die App erreichte
+    # die Datenbank dann nicht mehr.
+    networks:
+      - default
+      - proxy_network
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +78,12 @@ services:
       PMA_HOST: db
     depends_on:
       - db
+
+networks:
+  # Wird vom Reverse-Proxy bereitgestellt und liegt ausserhalb dieses
+  # Projekts — Compose legt es nicht an, es muss vorher existieren.
+  proxy_network:
+    external: true
 
 volumes:
   db_data:
