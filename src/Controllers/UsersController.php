@@ -312,6 +312,16 @@ final class UsersController extends Controller
             ],
         );
 
+        // Rollenwechsel: Rechte, die die neue Rolle nicht mehr tragen darf,
+        // werden mit entzogen. Bleiben sie liegen, wirken sie zwar dank der
+        // Rollenprüfung in Auth nicht mehr — die Rechtevergabe zeigt den
+        // Benutzer aber nicht mehr an, sie wären also nicht mehr sichtbar
+        // und würden bei einer Rückstufung auf orga/teacher wieder aufleben.
+        $revokedRights = 0;
+        if ($newRole !== (string) $user['role'] && !Permissions::allowsGranular($newRole)) {
+            $revokedRights = $this->revokeGranularRights($userId);
+        }
+
         $changes = [];
         foreach (['username' => 'Benutzername', 'firstname' => 'Vorname', 'lastname' => 'Nachname', 'role' => 'Rolle'] as $key => $label) {
             if ((string) ($user[$key] ?? '') !== (string) $data[$key]) {
@@ -324,16 +334,44 @@ final class UsersController extends Controller
         if ((string) ($user['email'] ?? '') !== (string) ($data['email'] ?? '')) {
             $changes[] = 'E-Mail geändert';
         }
+        if ($revokedRights > 0) {
+            $changes[] = sprintf('%d Rechtezuweisung(en) entzogen', $revokedRights);
+        }
 
         $this->ctx->session->pullOldInput();
         $this->ctx->audit->log(
             'Benutzer bearbeitet',
-            'info',
+            $revokedRights > 0 ? 'warning' : 'info',
             sprintf('Benutzer #%d "%s"%s', $userId, (string) $user['username'], $changes === [] ? ' (keine Änderung)' : ' — ' . implode(', ', $changes)),
             $schoolId,
         );
+        if ($revokedRights > 0) {
+            $this->flash(
+                'warning',
+                'Mit der neuen Rolle wurden alle bisherigen Berechtigungen und'
+                . ' Gruppenzuweisungen dieses Benutzers entzogen.',
+            );
+        }
         $this->flash('success', 'Die Änderungen wurden gespeichert.');
         $this->redirect($this->ctx->schoolUrl('/admin/benutzer'));
+    }
+
+    /**
+     * Entfernt alle granularen Rechte eines Benutzers — direkte Zuweisungen
+     * und Gruppenmitgliedschaften.
+     *
+     * @return int Anzahl der entfernten Zuweisungen.
+     */
+    private function revokeGranularRights(int $userId): int
+    {
+        $direct = $this->ctx->db
+            ->run('DELETE FROM user_permissions WHERE user_id = ?', [$userId])
+            ->rowCount();
+        $groups = $this->ctx->db
+            ->run('DELETE FROM user_permission_groups WHERE user_id = ?', [$userId])
+            ->rowCount();
+
+        return $direct + $groups;
     }
 
     // ---------- Löschen ----------

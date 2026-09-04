@@ -124,6 +124,15 @@ final class Auth
             return $this->permissions = [];
         }
 
+        // Nur orga/teacher tragen granulare Rechte. Wer die Rolle wechselt,
+        // verliert sie damit sofort — Zuweisungen, die beim Rollenwechsel in
+        // der Datenbank zurückblieben, wirken nicht mehr. Ohne diese Prüfung
+        // behielte ein herabgestuftes Orga-Mitglied seine Rechte, ohne dass
+        // die Rechtevergabe-UI sie noch anzeigen (und entziehen) könnte.
+        if (!Permissions::allowsGranular((string) $user['role'])) {
+            return $this->permissions = [];
+        }
+
         $direct = $this->db->fetchAll(
             'SELECT permission FROM user_permissions WHERE user_id = ?',
             [(int) $user['id']],

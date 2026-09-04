@@ -20,6 +20,16 @@ namespace App\Core;
  */
 final class Permissions
 {
+    /**
+     * Rollen, die überhaupt granulare Rechte tragen können.
+     *
+     * admin/school_admin haben ihre Rechte aus der Rollenlogik (siehe Auth),
+     * student/exhibitor bekommen nie welche. Wer die Rolle wechselt, verliert
+     * damit sofort alle zugewiesenen Rechte — auch dann, wenn in
+     * user_permissions oder user_permission_groups noch Altbestände liegen.
+     */
+    public const GRANULAR_ROLES = ['orga', 'teacher'];
+
     // Dashboard & Berichte
     public const DASHBOARD_SEHEN = 'dashboard_sehen';
     public const BERICHTE_SEHEN = 'berichte_sehen';
@@ -203,6 +213,12 @@ final class Permissions
     public static function exists(string $permission): bool
     {
         return in_array($permission, self::all(), true);
+    }
+
+    /** Darf diese Rolle granulare Rechte tragen? */
+    public static function allowsGranular(?string $role): bool
+    {
+        return $role !== null && in_array($role, self::GRANULAR_ROLES, true);
     }
 
     /**

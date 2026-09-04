@@ -14,10 +14,9 @@ final class NotificationsController extends Controller
     /** POST /api/benachrichtigungen/gelesen */
     public function markRead(array $params): array
     {
-        $userId = $this->ctx->auth->id();
-        if ($userId === null) {
-            return $this->jsonError('Nicht angemeldet.', 401);
-        }
+        // requireLogin() antwortet auf /api/-Routen selbst mit 401 (JSON),
+        // leitet also nicht auf das Anmeldeformular um.
+        $userId = (int) $this->requireLogin()['id'];
         $this->requireCsrf();
 
         $service = new Notifications($this->ctx->db);
@@ -35,10 +34,7 @@ final class NotificationsController extends Controller
     /** GET /api/benachrichtigungen */
     public function listUnread(array $params): array
     {
-        $userId = $this->ctx->auth->id();
-        if ($userId === null) {
-            return $this->jsonError('Nicht angemeldet.', 401);
-        }
+        $userId = (int) $this->requireLogin()['id'];
 
         $items = [];
         foreach ((new Notifications($this->ctx->db))->unreadFor($userId) as $row) {

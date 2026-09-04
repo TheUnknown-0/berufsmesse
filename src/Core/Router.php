@@ -49,6 +49,23 @@ final class Router
     }
 
     /**
+     * Alle registrierten Routen — für Übersichten und den Guard-Test.
+     *
+     * @return list<array{method: string, pattern: string, handler: array{class-string, string}}>
+     */
+    public function all(): array
+    {
+        return array_map(
+            static fn (array $route): array => [
+                'method' => $route['method'],
+                'pattern' => $route['pattern'],
+                'handler' => $route['handler'],
+            ],
+            $this->routes,
+        );
+    }
+
+    /**
      * @return array{handler: array{class-string, string}, params: array<string, string>}|null
      */
     public function match(string $method, string $path): ?array

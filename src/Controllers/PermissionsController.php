@@ -22,9 +22,6 @@ use PDOException;
  */
 final class PermissionsController extends Controller
 {
-    /** Rollen, die überhaupt granulare Rechte erhalten können. */
-    private const GRANULAR_ROLES = ['orga', 'teacher'];
-
     private ?PermissionService $permissions = null;
 
     // ---------- Matrix ----------
@@ -477,13 +474,13 @@ final class PermissionsController extends Controller
     private function candidates(int $schoolId): array
     {
         return $this->ctx->db->fetchAll(
-            "SELECT u.id, u.username, u.firstname, u.lastname, u.role,
+            'SELECT u.id, u.username, u.firstname, u.lastname, u.role,
                     (SELECT COUNT(*) FROM user_permissions p WHERE p.user_id = u.id) AS direct_count,
                     (SELECT COUNT(*) FROM user_permission_groups g WHERE g.user_id = u.id) AS group_count
              FROM users u
-             WHERE u.school_id = ? AND u.role IN ('orga', 'teacher')
-             ORDER BY u.role, u.lastname, u.firstname, u.username",
-            [$schoolId],
+             WHERE u.school_id = ? AND u.role IN (' . self::granularRolePlaceholders() . ')
+             ORDER BY u.role, u.lastname, u.firstname, u.username',
+            [$schoolId, ...Permissions::GRANULAR_ROLES],
         );
     }
 
@@ -495,18 +492,25 @@ final class PermissionsController extends Controller
         }
 
         $user = $this->ctx->db->fetchOne(
-            "SELECT * FROM users WHERE id = ? AND school_id = ? AND role IN ('orga', 'teacher')",
-            [$id, (int) $this->ctx->schoolId()],
+            'SELECT * FROM users WHERE id = ? AND school_id = ? AND role IN ('
+                . self::granularRolePlaceholders() . ')',
+            [$id, (int) $this->ctx->schoolId(), ...Permissions::GRANULAR_ROLES],
         );
         if ($user === null) {
             throw new HttpException(
                 404,
                 'Für diesen Benutzer können keine granularen Berechtigungen vergeben werden.'
-                . ' Möglich ist das nur für die Rollen ' . implode(' und ', self::GRANULAR_ROLES) . '.',
+                . ' Möglich ist das nur für die Rollen ' . implode(' und ', Permissions::GRANULAR_ROLES) . '.',
             );
         }
 
         return $user;
+    }
+
+    /** Platzhalterliste für `role IN (…)` aus Permissions::GRANULAR_ROLES. */
+    private static function granularRolePlaceholders(): string
+    {
+        return implode(', ', array_fill(0, count(Permissions::GRANULAR_ROLES), '?'));
     }
 
     /** Lädt eine Gruppe schul-isoliert. */

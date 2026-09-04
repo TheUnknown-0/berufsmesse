@@ -83,9 +83,11 @@ Kontext (`$this->ctx`): `db` (fetchOne/fetchAll/fetchValue/run/lastInsertId/tran
 3. **Nur** Prepared Statements (`$ctx->db->run/fetch*` mit `?`-Parametern). Nie String-Konkatenation von Werten — auch nicht mit `(int)`-Cast.
 4. **Jede** Query auf editions-/schulgebundene Tabellen filtert nach `edition_id` bzw. `school_id` aus dem Kontext — niemals IDs aus dem Request unbestätigt übernehmen (Schul-Isolation!). Bei per-ID-Zugriff: Eigentum prüfen (`WHERE id=? AND edition_id=?`).
 5. Berechtigungen NUR über `Permissions::KONSTANTEN` (nie String-Literale).
-6. Uploads NUR über `Services\Uploads` (`store`, `stream`, `delete`). Logos: `new Uploads($ctx->config['uploads']['dir'])`, Subdir `logos`, Anzeige über URL `$ctx->url('/medien/logos/' . $filename)`. Dokumente: Subdir `documents`, Download ausschließlich über euren permissions-geprüften Endpunkt mit `$uploads->stream('documents', $filename, $originalName)`.
-7. Passwort-Mindestlänge überall: 8 (Konstante `AuthController::MIN_PASSWORD_LENGTH`).
-8. CSP ist strikt (`script-src 'self'`): **keine Inline-`<script>`-Blöcke, keine `onclick=`-Attribute!** Alles JS in eigene Dateien unter `public/assets/js/`, eingebunden über `$pageScripts` (siehe unten). Inline-`style="..."`-Attribute sind erlaubt.
+6. **Jede** Route ist anmeldungs- UND berechtigungsgeschützt: `requireLogin()`/`requireSchool()` plus `requirePermission()`/`requireAdmin()` — oder, bei rollengebundenen Bereichen (Schüler, Lehrkräfte, Portal), eine ausdrückliche Rollenprüfung, die mit HTTP 403 abbricht. Bewusst offene Routen stehen mit Begründung in den Ausnahmelisten von `tests/Unit/RouteGuardsTest.php`; der Test prüft alle registrierten Routen und schlägt bei einer ungeschützten neuen Route fehl.
+7. Granulare Rechte tragen nur die Rollen aus `Permissions::GRANULAR_ROLES` (orga, teacher). `Auth::permissions()` setzt das durch, und ein Rollenwechsel entzieht Direktrechte samt Gruppenzuweisungen — Rechte enden mit der Rolle.
+8. Uploads NUR über `Services\Uploads` (`store`, `stream`, `delete`). Logos: `new Uploads($ctx->config['uploads']['dir'])`, Subdir `logos`, Anzeige über URL `$ctx->url('/medien/logos/' . $filename)`. Dokumente: Subdir `documents`, Download ausschließlich über euren permissions-geprüften Endpunkt mit `$uploads->stream('documents', $filename, $originalName)`.
+9. Passwort-Mindestlänge überall: 8 (Konstante `AuthController::MIN_PASSWORD_LENGTH`).
+10. CSP ist strikt (`script-src 'self'`): **keine Inline-`<script>`-Blöcke, keine `onclick=`-Attribute!** Alles JS in eigene Dateien unter `public/assets/js/`, eingebunden über `$pageScripts` (siehe unten). Inline-`style="..."`-Attribute sind erlaubt.
 
 ## Routen-Konventionen
 
