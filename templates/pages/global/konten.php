@@ -40,7 +40,7 @@ foreach ($links as $link) {
 
 <div class="card mb-2">
     <div class="card-pad">
-        <form method="get" action="<?= e($ctx->url('/global-admin/aussteller-konten')) ?>">
+        <form method="get" action="<?= e($ctx->url('/global-admin/aussteller-konten')) ?>" data-live="konten">
             <div class="form-grid">
                 <div class="field">
                     <label for="status">Status</label>
@@ -64,6 +64,7 @@ foreach ($links as $link) {
     </div>
 </div>
 
+<div data-live-target="konten">
 <?php if ($links === []): ?>
     <div class="empty-state">
         <div class="empty-icon">🔍</div>
@@ -209,3 +210,4 @@ foreach ($links as $link) {
         </dialog>
     <?php endforeach; ?>
 <?php endif; ?>
+</div>

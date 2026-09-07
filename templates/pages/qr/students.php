@@ -22,7 +22,7 @@
 <?= block_open($blockKey, $blockLabel) ?>
 <?php if ($blockKey === 'filter'): ?>
 <div class="card card-pad mb-2">
-    <form method="get" class="form-grid">
+    <form method="get" class="form-grid" data-live="qr-students">
         <div class="field">
             <label for="f-klasse">Klasse</label>
             <select id="f-klasse" name="klasse">
@@ -44,6 +44,7 @@
 </div>
 
 <?php elseif ($blockKey === 'liste'): ?>
+<div data-live-target="qr-students">
 <?php if ($students === []): ?>
     <div class="empty-state">
         <div class="empty-icon">🔍</div>
@@ -81,6 +82,7 @@
     </div>
     <p class="text-sm text-faint mt-2">Es werden höchstens 300 Einträge angezeigt — bei Bedarf Filter nutzen.</p>
 <?php endif; ?>
+</div>
 <?php endif; ?>
 <?= block_close() ?>
 <?php endforeach; ?>

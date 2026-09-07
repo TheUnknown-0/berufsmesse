@@ -21,7 +21,7 @@ $base = $ctx->schoolUrl('/aussteller');
 <?php if ($blockKey === 'filter'): ?>
 <div class="card mb-2">
     <div class="card-body">
-        <form method="get" action="<?= e($base) ?>">
+        <form method="get" action="<?= e($base) ?>" data-live="exhibitors">
             <div class="form-grid">
                 <div class="field mb-0">
                     <label for="q">Suche</label>
@@ -52,6 +52,7 @@ $base = $ctx->schoolUrl('/aussteller');
 </div>
 
 <?php elseif ($blockKey === 'liste'): ?>
+<div data-live-target="exhibitors">
 <?php if ($exhibitors === []): ?>
     <div class="empty-state">
         <div class="empty-icon">🔍</div>
@@ -108,6 +109,7 @@ $base = $ctx->schoolUrl('/aussteller');
         <?php endforeach; ?>
     </div>
 <?php endif; ?>
+</div>
 <?php endif; ?>
 <?= block_close() ?>
 <?php endforeach; ?>

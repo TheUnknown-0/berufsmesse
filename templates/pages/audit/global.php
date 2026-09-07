@@ -30,7 +30,7 @@ $query = static function (array $extra) use ($filters): string {
 
 <div class="card">
     <div class="card-pad">
-        <form method="get" action="<?= e($ctx->url('/global-admin/logs')) ?>">
+        <form method="get" action="<?= e($ctx->url('/global-admin/logs')) ?>" data-live="audit-global">
             <div class="form-grid">
                 <div class="field">
                     <label for="schule">Schule</label>
@@ -77,6 +77,7 @@ $query = static function (array $extra) use ($filters): string {
     </div>
 </div>
 
+<div data-live-target="audit-global">
 <p class="text-sm text-soft"><?= e((string) $total) ?> Einträge gefunden.</p>
 
 <?php if ($rows === []): ?>
@@ -127,14 +128,15 @@ $query = static function (array $extra) use ($filters): string {
     <?php if ($pages > 1): ?>
         <div class="cluster" style="margin-top:14px;">
             <?php if ($page > 1): ?>
-                <a class="btn btn-sm btn-ghost"
+                <a class="btn btn-sm btn-ghost" data-live-link
                    href="<?= e($ctx->url('/global-admin/logs') . '?' . $query(['seite' => $page - 1])) ?>">← Neuer</a>
             <?php endif; ?>
             <span class="text-sm text-soft">Seite <?= e((string) $page) ?> von <?= e((string) $pages) ?></span>
             <?php if ($page < $pages): ?>
-                <a class="btn btn-sm btn-ghost"
+                <a class="btn btn-sm btn-ghost" data-live-link
                    href="<?= e($ctx->url('/global-admin/logs') . '?' . $query(['seite' => $page + 1])) ?>">Älter →</a>
             <?php endif; ?>
         </div>
     <?php endif; ?>
 <?php endif; ?>
+</div>

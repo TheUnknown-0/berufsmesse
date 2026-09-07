@@ -55,7 +55,7 @@ $query = static function (array $extra) use ($filters): string {
 <?php elseif ($blockKey === 'filter'): ?>
 <div class="card">
     <div class="card-pad">
-        <form method="get" action="<?= e($ctx->schoolUrl('/admin/audit-log')) ?>">
+        <form method="get" action="<?= e($ctx->schoolUrl('/admin/audit-log')) ?>" data-live="audit">
             <div class="form-grid">
                 <div class="field">
                     <label for="stufe">Schweregrad</label>
@@ -90,6 +90,7 @@ $query = static function (array $extra) use ($filters): string {
 </div>
 
 <?php elseif ($blockKey === 'liste'): ?>
+<div data-live-target="audit">
 <?php if ($rows === []): ?>
     <div class="empty-state">
         <div class="empty-icon">📜</div>
@@ -130,17 +131,18 @@ $query = static function (array $extra) use ($filters): string {
     <?php if ($pages > 1): ?>
         <div class="cluster" style="margin-top:14px;">
             <?php if ($page > 1): ?>
-                <a class="btn btn-sm btn-ghost"
+                <a class="btn btn-sm btn-ghost" data-live-link
                    href="<?= e($ctx->schoolUrl('/admin/audit-log') . '?' . $query(['seite' => $page - 1])) ?>">← Neuer</a>
             <?php endif; ?>
             <span class="text-sm text-soft">Seite <?= e((string) $page) ?> von <?= e((string) $pages) ?></span>
             <?php if ($page < $pages): ?>
-                <a class="btn btn-sm btn-ghost"
+                <a class="btn btn-sm btn-ghost" data-live-link
                    href="<?= e($ctx->schoolUrl('/admin/audit-log') . '?' . $query(['seite' => $page + 1])) ?>">Älter →</a>
             <?php endif; ?>
         </div>
     <?php endif; ?>
 <?php endif; ?>
+</div>
 <?php endif; ?>
 <?= block_close() ?>
 <?php endforeach; ?>

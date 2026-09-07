@@ -33,6 +33,7 @@ $baseUrl = $ctx->config['app']['base_url'];
 <script src="<?= e($baseUrl) ?>/assets/js/app.js"></script>
 <script src="<?= e($baseUrl) ?>/assets/js/easter-egg.js"></script>
 <script src="<?= e($baseUrl) ?>/assets/js/tour.js"></script>
+<script src="<?= e($baseUrl) ?>/assets/js/live-search.js"></script>
 <?php foreach ($pageScripts ?? [] as $script): ?>
     <script src="<?= e($baseUrl) ?>/assets/js/<?= e($script) ?>"></script>
 <?php endforeach; ?>

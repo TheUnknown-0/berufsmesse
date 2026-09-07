@@ -60,7 +60,7 @@ $can = static fn (string $p): bool => $auth->can($p, $schoolId);
 <?php elseif ($blockKey === 'filter'): ?>
 <div class="card mb-2">
     <div class="card-body">
-        <form method="get" action="<?= e($ctx->schoolUrl('/admin/aussteller')) ?>">
+        <form method="get" action="<?= e($ctx->schoolUrl('/admin/aussteller')) ?>" data-live="exhibitors-admin">
             <div class="form-grid">
                 <div class="field">
                     <label for="q">Suche</label>
@@ -85,6 +85,7 @@ $can = static fn (string $p): bool => $auth->can($p, $schoolId);
 </div>
 
 <?php elseif ($blockKey === 'liste'): ?>
+<div data-live-target="exhibitors-admin">
 <?php if ($rows === []): ?>
     <div class="empty-state">
         <div class="empty-icon">🏢</div>
@@ -171,6 +172,7 @@ $can = static fn (string $p): bool => $auth->can($p, $schoolId);
         </table>
     </div>
 <?php endif; ?>
+</div>
 <?php endif; ?>
 <?= block_close() ?>
 <?php endforeach; ?>

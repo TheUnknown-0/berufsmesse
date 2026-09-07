@@ -81,7 +81,7 @@ $adminCount = ($counts['admin'] ?? 0) + ($counts['school_admin'] ?? 0) + ($count
 </div>
 
 <?php elseif ($blockKey === 'filter'): ?>
-<form class="card card-pad mb-2" method="get" action="<?= e($listUrl) ?>">
+<form class="card card-pad mb-2" method="get" action="<?= e($listUrl) ?>" data-live="users">
     <div class="form-grid">
         <div class="field">
             <label for="q">Suche</label>
@@ -114,6 +114,7 @@ $adminCount = ($counts['admin'] ?? 0) + ($counts['school_admin'] ?? 0) + ($count
 </form>
 
 <?php elseif ($blockKey === 'liste'): ?>
+<div data-live-target="users">
 <?php if ($users === []): ?>
     <div class="empty-state">
         <div class="empty-icon">👥</div>
@@ -192,15 +193,16 @@ $adminCount = ($counts['admin'] ?? 0) + ($counts['school_admin'] ?? 0) + ($count
     <?php if ($pages > 1): ?>
         <div class="cluster mt-2">
             <?php if ($page > 1): ?>
-                <a class="btn btn-sm btn-ghost" href="<?= e($pageUrl($page - 1)) ?>">← Zurück</a>
+                <a class="btn btn-sm btn-ghost" data-live-link href="<?= e($pageUrl($page - 1)) ?>">← Zurück</a>
             <?php endif; ?>
             <span class="text-sm text-soft">Seite <?= e((string) $page) ?> von <?= e((string) $pages) ?></span>
             <?php if ($page < $pages): ?>
-                <a class="btn btn-sm btn-ghost" href="<?= e($pageUrl($page + 1)) ?>">Weiter →</a>
+                <a class="btn btn-sm btn-ghost" data-live-link href="<?= e($pageUrl($page + 1)) ?>">Weiter →</a>
             <?php endif; ?>
         </div>
     <?php endif; ?>
 <?php endif; ?>
+</div>
 <?php endif; ?>
 <?= block_close() ?>
 <?php endforeach; ?>

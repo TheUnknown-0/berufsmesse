@@ -36,7 +36,7 @@ $studentUrl = static fn (int $id): string => $ctx->schoolUrl('/admin/anmeldungen
 <?php if ($blockKey === 'suche'): ?>
     <div class="card mb-2">
         <div class="card-body">
-            <form method="get" action="<?= e($ctx->schoolUrl('/admin/anmeldungen')) ?>">
+            <form method="get" action="<?= e($ctx->schoolUrl('/admin/anmeldungen')) ?>" data-live="registrations">
                 <div class="cluster">
                     <div style="flex:1;min-width:240px;">
                         <label class="text-sm text-soft" for="q">Schüler:in suchen (Name, Klasse, Benutzername)</label>
@@ -52,6 +52,7 @@ $studentUrl = static fn (int $id): string => $ctx->schoolUrl('/admin/anmeldungen
     </div>
 
 <?php elseif ($blockKey === 'schuelerliste'): ?>
+    <div data-live-target="registrations">
     <div class="card mb-2">
         <div class="card-header">
             <h2>Schüler:innen</h2>
@@ -102,6 +103,7 @@ $studentUrl = static fn (int $id): string => $ctx->schoolUrl('/admin/anmeldungen
                 </div>
             <?php endif; ?>
         <?php endif; ?>
+    </div>
     </div>
 
 <?php elseif ($blockKey === 'anmeldungen'): ?>
