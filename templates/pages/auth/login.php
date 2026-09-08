@@ -18,7 +18,10 @@
     </div>
     <div class="field">
         <label for="password">Passwort</label>
-        <input class="input" type="password" id="password" name="password" required autocomplete="current-password">
+        <div class="input-group">
+            <input class="input" type="password" id="password" name="password" required autocomplete="current-password">
+            <button type="button" class="input-icon-btn" data-toggle-password="password" aria-label="Passwort anzeigen" aria-pressed="false">👁</button>
+        </div>
     </div>
 
     <button class="btn btn-primary btn-block btn-lg" type="submit">Anmelden</button>

@@ -311,6 +311,16 @@ code, .mono { font-family: var(--font-mono); font-size: .92em; }
   margin-bottom: 5px;
 }
 .field .hint { font-size: .8rem; color: var(--ink-faint); margin-top: 4px; }
+.input-group { position: relative; }
+.input-group .input { padding-right: 40px; }
+.input-icon-btn {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--radius-sm);
+  font-size: 1rem; line-height: 1; color: var(--ink-faint); cursor: pointer;
+}
+.input-icon-btn:hover { background: var(--surface-2); color: var(--ink); }
 .field .error-text { font-size: .82rem; color: var(--danger); margin-top: 4px; font-weight: 700; }
 .input, select, textarea {
   width: 100%;

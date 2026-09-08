@@ -6,6 +6,7 @@
  *   data-open-modal="id"       → <dialog id> öffnen
  *   data-close-modal           → umgebendes <dialog> schließen
  *   data-menu-toggle           → nächstes .menu-list ein-/ausblenden
+ *   data-toggle-password="id"  → Passwortfeld #id zwischen verborgen/sichtbar umschalten
  *   data-confirm="Text"        → Bestätigung vor Submit/Klick
  *   BM.fetchJson(url, options) → fetch mit CSRF-Header + JSON-Handling
  */
@@ -81,7 +82,7 @@
 
     // ---------- Delegierte Klicks ----------
     document.addEventListener('click', function (ev) {
-        var t = ev.target.closest('[data-toggle-theme], [data-open-modal], [data-close-modal], [data-menu-toggle], [data-sidebar-toggle]');
+        var t = ev.target.closest('[data-toggle-theme], [data-open-modal], [data-close-modal], [data-menu-toggle], [data-sidebar-toggle], [data-toggle-password]');
 
         // Offene Menüs schließen, wenn außerhalb geklickt wird
         if (!ev.target.closest('.menu')) {
@@ -106,6 +107,14 @@
             if (sidebar) {
                 var open = sidebar.classList.toggle('open');
                 if (backdrop) { backdrop.hidden = !open; }
+            }
+        } else if (t.hasAttribute('data-toggle-password')) {
+            var pwInput = document.getElementById(t.getAttribute('data-toggle-password'));
+            if (pwInput) {
+                var showPw = pwInput.type === 'password';
+                pwInput.type = showPw ? 'text' : 'password';
+                t.setAttribute('aria-pressed', String(showPw));
+                t.setAttribute('aria-label', showPw ? 'Passwort verbergen' : 'Passwort anzeigen');
             }
         }
     });
