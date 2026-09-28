@@ -276,6 +276,13 @@ final class CustomizeController extends Controller
                 'darstellung' => ['🎨', 'Darstellung'],
                 'audit-log' => ['📜', 'Audit-Log'],
             ]],
+            'orga' => ['Orga-Tool', [
+                'uebersicht' => ['🧩', 'Übersicht'],
+                'meine-aufgaben' => ['✅', 'Meine Aufgaben'],
+                'gesamtchat' => ['📢', 'Gesamtchat'],
+                'leitungsrunde' => ['🧭', 'Leitungsrunde'],
+                'verwaltung' => ['⚙️', 'Orga-Verwaltung'],
+            ]],
         ];
     }
 

@@ -30,6 +30,8 @@ final class EditionCloner
         'exhibitor_users' => 'Aussteller-Zugänge',
         'orga_team' => 'Orga-Team-Zuordnungen',
         'feedback' => 'Feedback-Bögen (nur Fragen)',
+        'orga_tool' => 'Orga-Tool: Teams, Ziele & Organisationspunkte (als Vorlage)',
+        'orga_tool_members' => 'Orga-Tool: Teammitglieder & Leitungen',
     ];
 
     public function __construct(private readonly Database $db)
@@ -77,6 +79,14 @@ final class EditionCloner
 
         if (in_array('feedback', $parts, true)) {
             $stats['feedback'] = $this->copyFeedbackForms($sourceId, $targetId);
+        }
+
+        if (in_array('orga_tool', $parts, true)) {
+            $withMembers = in_array('orga_tool_members', $parts, true);
+            [$stats['orga_tool'], $members] = $this->copyOrgaTool($sourceId, $targetId, $exhibitorMap, $withMembers);
+            if ($withMembers) {
+                $stats['orga_tool_members'] = $members;
+            }
         }
 
         return $stats;
@@ -311,6 +321,111 @@ final class EditionCloner
         }
 
         return $count;
+    }
+
+    /**
+     * Orga-Tool als Vorlage übernehmen: Teams, Ziele und Organisationspunkte
+     * samt Checklisten, alles wieder offen und ohne Termine (die gehören zum
+     * alten Jahr). Nicht kopiert werden Kommentare, Chats und Protokolle.
+     * Zuständigkeiten bleiben nur, wenn auch die Mitglieder übernommen werden.
+     * Aussteller-Bezüge folgen der Aussteller-Kopie, sonst entfallen sie.
+     *
+     * @param  array<int, int> $exhibitorMap
+     * @return array{int, int} [Anzahl Teams, Anzahl Mitgliedschaften]
+     */
+    private function copyOrgaTool(int $sourceId, int $targetId, array $exhibitorMap, bool $withMembers): array
+    {
+        $teams = 0;
+        $memberships = 0;
+
+        foreach ($this->db->fetchAll(
+            'SELECT * FROM orga_teams WHERE edition_id = ? ORDER BY sort_order, id',
+            [$sourceId],
+        ) as $team) {
+            $this->db->run(
+                'INSERT INTO orga_teams (edition_id, name, color, description, sort_order, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?)',
+                [
+                    $targetId,
+                    $team['name'],
+                    $team['color'],
+                    $team['description'],
+                    (int) $team['sort_order'],
+                    $team['created_by'] !== null ? (int) $team['created_by'] : null,
+                ],
+            );
+            $newTeamId = $this->db->lastInsertId();
+            $teams++;
+
+            $members = [];
+            if ($withMembers) {
+                // Nur Konten, die noch die Rolle orga haben.
+                foreach ($this->db->fetchAll(
+                    "SELECT m.user_id, m.is_leader FROM orga_team_members m
+                     JOIN users u ON u.id = m.user_id
+                     WHERE m.team_id = ? AND u.role = 'orga'",
+                    [(int) $team['id']],
+                ) as $member) {
+                    $this->db->run(
+                        'INSERT INTO orga_team_members (team_id, user_id, is_leader) VALUES (?, ?, ?)',
+                        [$newTeamId, (int) $member['user_id'], (int) $member['is_leader']],
+                    );
+                    $members[(int) $member['user_id']] = true;
+                    $memberships++;
+                }
+            }
+
+            $goalMap = [];
+            foreach ($this->db->fetchAll(
+                'SELECT * FROM orga_goals WHERE team_id = ? ORDER BY sort_order, id',
+                [(int) $team['id']],
+            ) as $goal) {
+                $this->db->run(
+                    'INSERT INTO orga_goals (team_id, title, description, sort_order) VALUES (?, ?, ?, ?)',
+                    [$newTeamId, $goal['title'], $goal['description'], (int) $goal['sort_order']],
+                );
+                $goalMap[(int) $goal['id']] = $this->db->lastInsertId();
+            }
+
+            foreach ($this->db->fetchAll(
+                'SELECT * FROM orga_tasks WHERE team_id = ? ORDER BY sort_order, id',
+                [(int) $team['id']],
+            ) as $task) {
+                $assignee = $task['assignee_id'] !== null && isset($members[(int) $task['assignee_id']])
+                    ? (int) $task['assignee_id']
+                    : null;
+                $this->db->run(
+                    "INSERT INTO orga_tasks
+                        (team_id, goal_id, exhibitor_id, title, description, status, priority,
+                         assignee_id, sort_order, created_by)
+                     VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)",
+                    [
+                        $newTeamId,
+                        $task['goal_id'] !== null ? ($goalMap[(int) $task['goal_id']] ?? null) : null,
+                        $task['exhibitor_id'] !== null ? ($exhibitorMap[(int) $task['exhibitor_id']] ?? null) : null,
+                        $task['title'],
+                        $task['description'],
+                        $task['priority'],
+                        $assignee,
+                        (int) $task['sort_order'],
+                        $task['created_by'] !== null ? (int) $task['created_by'] : null,
+                    ],
+                );
+                $newTaskId = $this->db->lastInsertId();
+
+                foreach ($this->db->fetchAll(
+                    'SELECT label, sort_order FROM orga_task_checklist WHERE task_id = ? ORDER BY sort_order, id',
+                    [(int) $task['id']],
+                ) as $item) {
+                    $this->db->run(
+                        'INSERT INTO orga_task_checklist (task_id, label, sort_order) VALUES (?, ?, ?)',
+                        [$newTaskId, $item['label'], (int) $item['sort_order']],
+                    );
+                }
+            }
+        }
+
+        return [$teams, $memberships];
     }
 
     /**

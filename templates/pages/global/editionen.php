@@ -241,7 +241,8 @@ $statusBadges = ['draft' => 'badge-warning', 'active' => 'badge-success', 'archi
                         <?php endforeach; ?>
                         <div class="hint">
                             Aussteller-Zugänge und Orga-Zuordnungen setzen voraus, dass auch die Aussteller
-                            übernommen werden.
+                            übernommen werden. Orga-Teammitglieder setzen die Orga-Tool-Vorlage voraus;
+                            Chats, Kommentare und Protokolle werden nie kopiert.
                         </div>
                     </div>
 

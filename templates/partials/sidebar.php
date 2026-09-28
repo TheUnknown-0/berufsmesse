@@ -8,16 +8,19 @@
 use App\Core\Permissions as P;
 use App\Services\Customization;
 use App\Services\FeedbackService;
+use App\Services\OrgaAccess;
 
 $user = $auth->user();
 $schoolId = $ctx->schoolId();
 $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
-$navLink = static function (string $url, string $icon, string $label) use ($currentPath): string {
+$navLink = static function (string $url, string $icon, string $label, int $count = 0) use ($currentPath): string {
     $active = $currentPath === $url || ($url !== '/' && str_starts_with($currentPath, rtrim($url, '/') . '/'));
 
     return '<a class="nav-link' . ($active ? ' active' : '') . '" href="' . e($url) . '">'
-        . '<span class="nav-icon" aria-hidden="true">' . $icon . '</span>' . e($label) . '</a>';
+        . '<span class="nav-icon" aria-hidden="true">' . $icon . '</span>' . e($label)
+        . ($count > 0 ? '<span class="nav-count" aria-label="' . e($count . ' ungelesen') . '">' . e((string) $count) . '</span>' : '')
+        . '</a>';
 };
 
 $s = static fn (string $path): string => $ctx->schoolUrl($path);
@@ -90,6 +93,29 @@ if ($user !== null && $ctx->editionId() !== null) {
                 ]];
             }
 
+            // Orga-Tool: Rolle orga und Verwaltung, sobald eine Edition aktiv ist.
+            if (in_array($role, OrgaAccess::ROLES, true) && $ctx->editionId() !== null && $schoolId !== null) {
+                $orga = new OrgaAccess($ctx->db, $auth, (int) $schoolId, (int) $ctx->editionId());
+                $orgaUnread = $orga->unreadCounts();
+                // Ungelesenes aus Team-Chats hängt an der Übersicht, dort stehen alle Teams.
+                $teamUnread = array_sum(array_filter(
+                    $orgaUnread,
+                    static fn (string $key): bool => str_starts_with($key, 't'),
+                    ARRAY_FILTER_USE_KEY,
+                ));
+                $orgaSection = ['Orga-Tool', [
+                    'uebersicht' => [$s('/orga'), '🧩', 'Übersicht', true, $teamUnread],
+                    'meine-aufgaben' => [$s('/orga/meine-aufgaben'), '✅', 'Meine Aufgaben', true, 0],
+                    'gesamtchat' => [$s('/orga/chat/gesamt'), '📢', 'Gesamtchat', true, $orgaUnread['all'] ?? 0],
+                    'leitungsrunde' => [$s('/orga/chat/leitung'), '🧭', 'Leitungsrunde', array_key_exists('leads', $orgaUnread), $orgaUnread['leads'] ?? 0],
+                    'verwaltung' => [$s('/orga/verwaltung'), '⚙️', 'Orga-Verwaltung', $orga->manages(), 0],
+                ]];
+                // Für Orga-Mitglieder ist es der Hauptbereich, für Admins ein Bereich unter vielen.
+                if ($role === 'orga') {
+                    $sections['orga'] = $orgaSection;
+                }
+            }
+
             if (in_array($role, ['admin', 'school_admin', 'orga', 'teacher'], true)) {
                 $isSchoolAdmin = in_array($role, ['admin', 'school_admin'], true);
                 $sections['admin'] = ['Verwaltung', [
@@ -115,6 +141,10 @@ if ($user !== null && $ctx->editionId() !== null) {
                 ]];
             }
 
+            if (isset($orgaSection) && $role !== 'orga') {
+                $sections['orga'] = $orgaSection;
+            }
+
             foreach ($sections as $sectionKey => [$sectionTitle, $items]) {
                 // Erst Berechtigungsfilter, dann die schulspezifische Anordnung
                 $items = array_filter($items, static fn (array $item): bool => $item[3]);
@@ -123,8 +153,8 @@ if ($user !== null && $ctx->editionId() !== null) {
                     continue;
                 }
                 echo '<div class="nav-section">' . e($sectionTitle) . '</div>';
-                foreach ($items as [$url, $icon, $label]) {
-                    echo $navLink($url, $icon, $label);
+                foreach ($items as $item) {
+                    echo $navLink($item[0], $item[1], $item[2], (int) ($item[4] ?? 0));
                 }
             }
             ?>

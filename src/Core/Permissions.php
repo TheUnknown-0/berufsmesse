@@ -105,6 +105,12 @@ final class Permissions
     public const FEEDBACK_FREISCHALTEN = 'feedback_freischalten';
     public const FEEDBACK_AUSWERTEN = 'feedback_auswerten';
 
+    // Orga-Tool (Teams, Organisationspunkte, Chats). Mitglied und Teamleitung
+    // ist man über die Teamzuordnung, nicht über ein Recht.
+    public const ORGA_TOOL_ALLE_SEHEN = 'orga_tool_alle_sehen';
+    public const ORGA_TOOL_VERWALTEN = 'orga_tool_verwalten';
+    public const ORGA_CHAT_MODERIEREN = 'orga_chat_moderieren';
+
     // Sonstiges
     public const ANKUENDIGUNGEN_VERWALTEN = 'ankuendigungen_verwalten';
     public const AUDIT_LOGS_SEHEN = 'audit_logs_sehen';
@@ -192,6 +198,11 @@ final class Permissions
                 self::FEEDBACK_FREISCHALTEN => 'Feedback-Bögen freischalten & schließen',
                 self::FEEDBACK_AUSWERTEN => 'Feedback auswerten & exportieren',
             ],
+            'Orga-Tool' => [
+                self::ORGA_TOOL_ALLE_SEHEN => 'Alle Orga-Teams einsehen (inkl. Chats und Protokolle)',
+                self::ORGA_TOOL_VERWALTEN => 'Orga-Tool verwalten (Teams, Mitglieder, Leitungen, alle Organisationspunkte)',
+                self::ORGA_CHAT_MODERIEREN => 'Orga-Chats moderieren (fremde Nachrichten bearbeiten, löschen, anheften)',
+            ],
             'Sonstiges' => [
                 self::ANKUENDIGUNGEN_VERWALTEN => 'Ankündigungen verwalten',
                 self::AUDIT_LOGS_SEHEN => 'Audit-Log sehen',
@@ -277,6 +288,9 @@ final class Permissions
             self::FEEDBACK_LOESCHEN => [self::FEEDBACK_SEHEN],
             self::FEEDBACK_FREISCHALTEN => [self::FEEDBACK_BEARBEITEN],
             self::FEEDBACK_AUSWERTEN => [self::FEEDBACK_SEHEN],
+
+            self::ORGA_TOOL_VERWALTEN => [self::ORGA_TOOL_ALLE_SEHEN],
+            self::ORGA_CHAT_MODERIEREN => [self::ORGA_TOOL_ALLE_SEHEN],
         ];
     }
 

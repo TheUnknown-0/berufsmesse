@@ -170,6 +170,10 @@ final class EditionsController extends Controller
         if (!in_array('exhibitors', $parts, true)) {
             $parts = array_values(array_diff($parts, ['exhibitor_users', 'orga_team']));
         }
+        // Mitglieder hängen an den übernommenen Orga-Teams.
+        if (!in_array('orga_tool', $parts, true)) {
+            $parts = array_values(array_diff($parts, ['orga_tool_members']));
+        }
 
         [$newId, $stats] = $this->ctx->db->transaction(
             function () use ($schoolId, $name, $year, $source, $parts): array {

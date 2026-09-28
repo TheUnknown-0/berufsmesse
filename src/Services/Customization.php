@@ -17,7 +17,7 @@ namespace App\Services;
  */
 final class Customization
 {
-    public const NAV_SECTIONS = ['student', 'teacher', 'exhibitor', 'admin'];
+    public const NAV_SECTIONS = ['student', 'teacher', 'exhibitor', 'admin', 'orga'];
 
     public function __construct(
         private readonly Settings $settings,
