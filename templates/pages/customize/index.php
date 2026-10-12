@@ -91,22 +91,22 @@ $sortableList = static function (array $items, array $layout, array $locked = []
                     <div class="field">
                         <label for="primary">Primärfarbe (Buttons, Links, Akzente)</label>
                         <div class="cluster">
-                            <input type="color" id="primary" name="primary" value="<?= e($theme['primary'] ?? '#2563eb') ?>"
+                            <input type="color" id="primary" name="primary" value="<?= e($theme['primary'] ?? '#c96442') ?>"
                                    style="width:48px;height:38px;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);cursor:pointer;">
                             <label class="checkbox-row mb-0">
                                 <input type="checkbox" name="primary_default" value="1" <?= $theme['primary'] === null ? 'checked' : '' ?>>
-                                <span class="text-sm">Standard (Blau)</span>
+                                <span class="text-sm">Standard (Terrakotta)</span>
                             </label>
                         </div>
                     </div>
                     <div class="field">
                         <label for="bg">Seitenhintergrund (helles Design)</label>
                         <div class="cluster">
-                            <input type="color" id="bg" name="bg" value="<?= e($theme['bg'] ?? '#f3f4f6') ?>"
+                            <input type="color" id="bg" name="bg" value="<?= e($theme['bg'] ?? '#f7f3ef') ?>"
                                    style="width:48px;height:38px;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);cursor:pointer;">
                             <label class="checkbox-row mb-0">
                                 <input type="checkbox" name="bg_default" value="1" <?= $theme['bg'] === null ? 'checked' : '' ?>>
-                                <span class="text-sm">Standard (Hellgrau)</span>
+                                <span class="text-sm">Standard (Warmweiß)</span>
                             </label>
                         </div>
                         <div class="hint">Der Dunkelmodus behält seinen neutralen Hintergrund.</div>

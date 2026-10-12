@@ -67,6 +67,7 @@ $teamCard = static function (array $team, array $stat, ?bool $leader) use ($s, $
 </div>
 
 <?php foreach (page_blocks('orga-uebersicht', [
+    'ankuendigungen' => 'Ankündigungen',
     'countdown' => 'Countdown bis zum Abschluss',
     'kommunikation' => 'Chats',
     'meine-aufgaben' => 'Meine nächsten Aufgaben',
@@ -74,7 +75,9 @@ $teamCard = static function (array $team, array $stat, ?bool $leader) use ($s, $
     'alle-teams' => 'Weitere Teams',
 ]) as $blockKey => $blockLabel): ?>
 <?= block_open($blockKey, $blockLabel) ?>
-<?php if ($blockKey === 'countdown'): ?>
+<?php if ($blockKey === 'ankuendigungen'): ?>
+    <?= $view->renderPartial('partials/announcements', ['announcements' => $announcements]) ?>
+<?php elseif ($blockKey === 'countdown'): ?>
 <div class="card card-pad mb-2">
     <?= $view->renderPartial('pages/orga/_countdown', ['deadline' => $deadline, 'canSet' => $access->manages()]) ?>
 </div>

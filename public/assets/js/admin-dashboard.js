@@ -17,7 +17,9 @@
     }
 
     var primary = cssVar('--primary', '#0d6e62');
-    var accent = cssVar('--accent', '#e8a020');
+    // Kapazität neutral, damit sie sich von „Belegt“ (Primärfarbe) abhebt; --accent ist seit dem
+    // Redesign identisch mit --primary.
+    var capacity = cssVar('--border-strong', '#c4b8ac');
     var ink = cssVar('--ink-soft', '#5a6663');
     var border = cssVar('--border', '#e0d8c9');
 
@@ -65,7 +67,7 @@
                 labels: data.labels,
                 datasets: [
                     { label: 'Belegt', data: data.used, backgroundColor: primary, borderRadius: 4 },
-                    { label: 'Kapazität', data: data.capacity, backgroundColor: accent, borderRadius: 4 }
+                    { label: 'Kapazität', data: data.capacity, backgroundColor: capacity, borderRadius: 4 }
                 ]
             },
             options: baseOptions

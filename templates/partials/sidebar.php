@@ -14,8 +14,13 @@ $user = $auth->user();
 $schoolId = $ctx->schoolId();
 $currentPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
 
-$navLink = static function (string $url, string $icon, string $label, int $count = 0) use ($currentPath): string {
-    $active = $currentPath === $url || ($url !== '/' && str_starts_with($currentPath, rtrim($url, '/') . '/'));
+// Aktiv ist nur der Eintrag mit der längsten passenden Adresse. Sonst leuchtet
+// z. B. „Übersicht“ (/{schule}/) auf jeder Unterseite der Schule mit.
+$activeUrl = null;
+$matches = static fn (string $url): bool => $currentPath === $url
+    || ($url !== '/' && str_starts_with($currentPath, rtrim($url, '/') . '/'));
+$navLink = static function (string $url, string $icon, string $label, int $count = 0) use (&$activeUrl): string {
+    $active = $url === $activeUrl;
 
     return '<a class="nav-link' . ($active ? ' active' : '') . '" href="' . e($url) . '">'
         . '<span class="nav-icon" aria-hidden="true">' . $icon . '</span>' . e($label)
@@ -145,10 +150,20 @@ if ($user !== null && $ctx->editionId() !== null) {
                 $sections['orga'] = $orgaSection;
             }
 
-            foreach ($sections as $sectionKey => [$sectionTitle, $items]) {
-                // Erst Berechtigungsfilter, dann die schulspezifische Anordnung
+            // Erst Berechtigungsfilter, dann die schulspezifische Anordnung
+            foreach ($sections as $sectionKey => [, $items]) {
                 $items = array_filter($items, static fn (array $item): bool => $item[3]);
-                $items = Customization::applyLayout($items, $navLayout[$sectionKey] ?? [], ['darstellung']);
+                $sections[$sectionKey][1] = Customization::applyLayout($items, $navLayout[$sectionKey] ?? [], ['darstellung']);
+            }
+            foreach ($sections as [, $items]) {
+                foreach ($items as $item) {
+                    if ($matches($item[0]) && strlen($item[0]) > strlen((string) $activeUrl)) {
+                        $activeUrl = $item[0];
+                    }
+                }
+            }
+
+            foreach ($sections as [$sectionTitle, $items]) {
                 if ($items === []) {
                     continue;
                 }
@@ -161,6 +176,9 @@ if ($user !== null && $ctx->editionId() !== null) {
         <?php endif; ?>
 
         <?php if ($user !== null && $user['role'] === 'admin'): ?>
+            <?php if ($matches($ctx->url('/global-admin'))) {
+                $activeUrl = $ctx->url('/global-admin');
+            } ?>
             <div class="nav-section">System</div>
             <?= $navLink($ctx->url('/global-admin'), '🌐', 'Global-Admin') ?>
         <?php endif; ?>

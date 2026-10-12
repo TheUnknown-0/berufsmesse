@@ -23,6 +23,7 @@ $quote = static fn (int $part, int $total): int => $total > 0 ? (int) round($par
 </div>
 
 <?php $dashboardBlocks = page_blocks('admin-dashboard', [
+    'ankuendigungen' => 'Ankündigungen',
     'statistik' => 'Statistik-Kacheln',
     'zuteilung' => 'Automatische Zuteilung',
     'diagramme' => 'Diagramme',
@@ -30,7 +31,9 @@ $quote = static fn (int $part, int $total): int => $total > 0 ? (int) round($par
 ]); ?>
 <?php foreach ($dashboardBlocks as $blockKey => $blockLabel): ?>
 <?= block_open($blockKey, $blockLabel) ?>
-<?php if ($blockKey === 'statistik'): ?>
+<?php if ($blockKey === 'ankuendigungen'): ?>
+    <?= $view->renderPartial('partials/announcements', ['announcements' => $announcements]) ?>
+<?php elseif ($blockKey === 'statistik'): ?>
 <div class="stat-grid">
     <div class="stat-card">
         <div class="stat-value"><?= e((string) $stats['students_total']) ?></div>

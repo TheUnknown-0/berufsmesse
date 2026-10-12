@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\Announcements;
 use DateTimeImmutable;
 
 /**
@@ -44,14 +45,8 @@ final class StudentController extends Controller
             [$editionId],
         );
 
-        $announcements = $this->ctx->db->fetchAll(
-            'SELECT id, title, body, type FROM announcements
-             WHERE school_id = ? AND is_active = 1
-               AND target_role IN (\'all\', \'student\')
-               AND (expires_at IS NULL OR expires_at > NOW())
-             ORDER BY created_at DESC',
-            [(int) $this->ctx->schoolId()],
-        );
+        $announcements = (new Announcements($this->ctx->db))
+            ->activeFor((int) $this->ctx->schoolId(), 'student');
 
         return $this->render('pages/student/dashboard', [
             'title' => 'Übersicht',

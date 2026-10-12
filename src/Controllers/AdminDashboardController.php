@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Permissions;
+use App\Services\Announcements;
 use App\Services\AutoAssign;
 use App\Services\Capacity;
 
@@ -58,6 +59,8 @@ final class AdminDashboardController extends Controller
             'canAssign' => $this->ctx->auth->can(Permissions::ZUTEILUNG_AUSFUEHREN, $this->ctx->schoolId()),
             'canReset' => $this->ctx->auth->can(Permissions::ZUTEILUNG_ZURUECKSETZEN, $this->ctx->schoolId()),
             'statsUrl' => $this->ctx->schoolUrl('/api/dashboard/stats'),
+            'announcements' => (new Announcements($this->ctx->db))
+                ->activeFor((int) $this->ctx->schoolId(), $this->ctx->auth->role()),
             'pageScripts' => ['vendor/chart.umd.min.js', 'admin-dashboard.js'],
         ]);
     }

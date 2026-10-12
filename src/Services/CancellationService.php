@@ -142,8 +142,10 @@ final class CancellationService
                 [$exhibitorId, $editionId],
             );
 
+            // Wie beim Ausfall (Services\Rebooking): Sichtbarkeit und Pipeline gehören zusammen,
+            // sonst stünde ein abgesagter Aussteller in der Pipeline weiter auf „Zugesagt“.
             $this->ctx->db->run(
-                'UPDATE exhibitors SET active = 0 WHERE id = ? AND edition_id = ?',
+                "UPDATE exhibitors SET active = 0, pipeline_status = 'cancelled' WHERE id = ? AND edition_id = ?",
                 [$exhibitorId, $editionId],
             );
             $this->ctx->db->run(

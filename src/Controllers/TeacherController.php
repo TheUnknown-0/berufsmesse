@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\Announcements;
 
 /**
  * Lehrer-Bereich: Klassenübersicht mit Einschreibe- und Zuteilungsquote
@@ -84,6 +85,8 @@ final class TeacherController extends Controller
             'classes' => $classes,
             'managedCount' => $managedCount,
             'withoutClass' => $withoutClass,
+            'announcements' => (new Announcements($this->ctx->db))
+                ->activeFor((int) $this->ctx->schoolId(), $this->ctx->auth->role()),
         ]);
     }
 

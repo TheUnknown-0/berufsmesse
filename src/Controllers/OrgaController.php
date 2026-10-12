@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Services\Announcements;
 use App\Services\OrgaService;
 
 /**
@@ -49,6 +50,8 @@ final class OrgaController extends OrgaBaseController
             'deadline' => OrgaService::deadlineFor(null, $settings),
             'myOpen' => $myOpen,
             'myOpenCount' => $myOpenCount,
+            'announcements' => (new Announcements($this->ctx->db))
+                ->activeFor((int) $this->ctx->schoolId(), $this->ctx->auth->role()),
             'pageScripts' => ['orga.js'],
         ]);
     }

@@ -49,7 +49,12 @@ $time = static fn (mixed $t): string => substr((string) $t, 0, 5);
                         <div class="cluster" style="align-items:flex-start;">
                             <div class="mono nowrap" style="min-width:120px;">
                                 <strong><?= e($time($slot['start_time'])) ?>–<?= e($time($slot['end_time'])) ?></strong>
-                                <div class="text-sm text-faint">Slot <?= e((string) $slot['slot_number']) ?></div>
+                                <?php /* Art statt interner Slot-Nummer: Die Nummer zählt Pausen mit und passt dann nicht zum Slot-Namen. */ ?>
+                                <div class="text-sm text-faint"><?= e(match ($slot['kind']) {
+                                    'break' => 'Pause',
+                                    'free' => 'Freie Wahl',
+                                    default => 'Fester Slot',
+                                }) ?></div>
                             </div>
                             <div style="flex:1;min-width:220px;">
                                 <?php if ($slot['kind'] === 'break'): ?>

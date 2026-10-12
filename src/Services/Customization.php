@@ -51,9 +51,9 @@ final class Customization
                 . "--accent-ink:color-mix(in srgb,{$p} 65%,#000);}";
             $css .= "[data-theme=\"dark\"]{--primary:color-mix(in srgb,{$p} 65%,#fff);"
                 . "--primary-strong:color-mix(in srgb,{$p} 50%,#fff);"
-                . "--primary-soft:color-mix(in srgb,{$p} 30%,#111827);"
+                . "--primary-soft:color-mix(in srgb,{$p} 30%,#101010);"
                 . "--accent:color-mix(in srgb,{$p} 65%,#fff);"
-                . "--accent-soft:color-mix(in srgb,{$p} 30%,#111827);"
+                . "--accent-soft:color-mix(in srgb,{$p} 30%,#101010);"
                 . "--accent-ink:color-mix(in srgb,{$p} 45%,#fff);}";
         }
         if ($theme['bg'] !== null) {

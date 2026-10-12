@@ -52,10 +52,11 @@ final class SettingsController extends Controller
             'registration_page_enabled' => $this->ctx->settings->getBool('registration_page_enabled', $schoolId),
             'checkin_self_scan_enabled' => $this->ctx->settings->getBool('checkin_self_scan_enabled', $schoolId, true),
             'checkin_teacher_scan_enabled' => $this->ctx->settings->getBool('checkin_teacher_scan_enabled', $schoolId, true),
-            'qr_validity_enabled' => $this->ctx->settings->getBool('qr_validity_enabled', $schoolId),
+            // Standard „an“ wie in QrService::windowError(), sonst zeigt die Seite etwas anderes an, als gilt.
+            'qr_validity_enabled' => $this->ctx->settings->getBool('qr_validity_enabled', $schoolId, true),
             'qr_validity_before' => $this->ctx->settings->getInt('qr_validity_before', $schoolId, 10),
             'qr_validity_after' => $this->ctx->settings->getInt('qr_validity_after', $schoolId, 15),
-            'qr_validity_teacher_enabled' => $this->ctx->settings->getBool('qr_validity_teacher_enabled', $schoolId),
+            'qr_validity_teacher_enabled' => $this->ctx->settings->getBool('qr_validity_teacher_enabled', $schoolId, true),
             'qr_validity_teacher_before' => $this->ctx->settings->getInt('qr_validity_teacher_before', $schoolId, 20),
             'qr_validity_teacher_after' => $this->ctx->settings->getInt('qr_validity_teacher_after', $schoolId, 30),
             'site_password_enabled' => $this->ctx->settings->getBool('site_password_enabled'),

@@ -17,12 +17,15 @@ $totalComplete = array_sum(array_column($classes, 'vollstaendig'));
 </div>
 
 <?php $classBlocks = page_blocks('klassen', [
+    'ankuendigungen' => 'Ankündigungen',
     'kennzahlen' => 'Kennzahlen',
     'klassenliste' => 'Klassenliste',
 ]); ?>
 <?php foreach ($classBlocks as $blockKey => $blockLabel): ?>
 <?= block_open($blockKey, $blockLabel) ?>
-<?php if ($blockKey === 'kennzahlen'): ?>
+<?php if ($blockKey === 'ankuendigungen'): ?>
+    <?= $view->renderPartial('partials/announcements', ['announcements' => $announcements]) ?>
+<?php elseif ($blockKey === 'kennzahlen'): ?>
     <div class="stat-grid">
         <div class="stat-card">
             <div class="stat-value"><?= e((string) $totalStudents) ?></div>

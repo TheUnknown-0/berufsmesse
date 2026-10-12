@@ -47,21 +47,7 @@ $widgets = page_blocks('uebersicht', [
 <?php foreach ($widgets as $blockKey => $blockLabel): ?>
     <?= block_open($blockKey, $blockLabel) ?>
     <?php if ($blockKey === 'ankuendigungen'): ?>
-        <?php foreach ($announcements as $announcement): ?>
-            <?php
-            $type = (string) $announcement['type'];
-            $class = in_array($type, ['info', 'success', 'warning', 'error'], true) ? $type : 'info';
-            ?>
-            <div class="alert alert-<?= e($class) ?>">
-                <span aria-hidden="true">📣</span>
-                <div>
-                    <strong><?= e($announcement['title']) ?></strong>
-                    <?php if (!empty($announcement['body'])): ?>
-                        <div class="text-sm"><?= nl2br(e($announcement['body'])) ?></div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        <?php endforeach; ?>
+        <?= $view->renderPartial('partials/announcements', ['announcements' => $announcements]) ?>
 
     <?php elseif ($blockKey === 'statuskacheln'): ?>
         <div class="stat-grid">
