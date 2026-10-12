@@ -41,6 +41,14 @@ services:
       DB_WAIT_TIMEOUT: ${DB_WAIT_TIMEOUT:-120}
       # Nur diese Adressen dürfen X-Forwarded-For setzen. Leer = niemand.
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # E-Mail-Versand (Anmeldung per Code, Test-Mail). Leer = deaktiviert.
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Berufsmesse}
     volumes:
       - uploads:/var/www/html/uploads
     # "default" muss ausdruecklich dabeistehen: sobald ein Service eigene

@@ -6,15 +6,21 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Services\Audit;
+use App\Services\EmailService;
+use App\Services\LoginCodeService;
 use App\Services\LoginThrottle;
+use App\Services\Mailer;
 
 /**
  * Login (global & schulspezifisch), Logout, Seitenpasswort,
- * Passwortwechsel, Schüler-Selbstregistrierung.
+ * Passwortwechsel, Anmeldung per E-Mail-Code, Schüler-Selbstregistrierung.
  */
 final class AuthController extends Controller
 {
     public const MIN_PASSWORD_LENGTH = 8;
+
+    private const CODE_SESSION_KEY = '_login_code_username';
+    private const CODE_LOGIN_FLAG = '_login_via_code';
 
     // ---------- Login ----------
 
@@ -31,6 +37,7 @@ final class AuthController extends Controller
         return $this->render('pages/auth/login', [
             'title' => 'Anmelden',
             'redirect' => $this->safeRedirectTarget($_GET['redirect'] ?? null),
+            'codeLoginAvailable' => (string) ($this->ctx->config['mail']['host'] ?? '') !== '',
         ], 'minimal');
     }
 
@@ -75,6 +82,152 @@ final class AuthController extends Controller
         $this->ctx->auth->loginAs($user);
         $this->ctx->audit->log(
             'Login erfolgreich',
+            'info',
+            "Benutzer: {$username} (Rolle: {$user['role']})",
+            $user['school_id'] !== null ? (int) $user['school_id'] : ($school['id'] ?? null),
+            (int) $user['id'],
+            $username,
+        );
+
+        $redirect = $this->safeRedirectTarget($_POST['redirect'] ?? null);
+        $this->redirect($redirect ?? $this->afterLoginUrl($user));
+    }
+
+    // ---------- Anmeldung per Code ----------
+
+    /** GET /login-code und GET /{school}/login-code */
+    public function showCodeRequest(array $params): string
+    {
+        $school = isset($params['school']) ? $this->ctx->loadSchool($params['school']) : null;
+        if ($this->ctx->auth->check()) {
+            $this->redirect($this->afterLoginUrl($this->ctx->auth->user()));
+        }
+
+        return $this->render('pages/auth/login-code', [
+            'title' => 'Anmeldung per Code',
+            'redirect' => $this->safeRedirectTarget($_GET['redirect'] ?? null),
+            'username' => (string) ($this->ctx->session->get(self::CODE_SESSION_KEY) ?? ''),
+        ], 'minimal');
+    }
+
+    /** POST /login-code und POST /{school}/login-code */
+    public function requestCode(array $params): string
+    {
+        $school = isset($params['school']) ? $this->ctx->loadSchool($params['school']) : null;
+        $this->requireCsrf();
+
+        $username = trim((string) ($_POST['username'] ?? ''));
+        $redirect = $this->safeRedirectTarget($_POST['redirect'] ?? null);
+        $ip = Audit::clientIp();
+        $back = $school !== null ? $this->ctx->schoolUrl('/login-code') : $this->ctx->url('/login-code');
+
+        if ($username === '') {
+            $this->flash('error', 'Bitte einen Benutzernamen eingeben.');
+            $this->redirect($back);
+        }
+
+        $throttle = new LoginThrottle($this->ctx->db);
+        if ($throttle->isBlocked($username, $ip)) {
+            $this->ctx->audit->log('Code-Anmeldung blockiert (Rate-Limit)', 'warning', "Benutzer: {$username}", $school['id'] ?? null);
+            $this->flash('error', 'Zu viele Versuche. Bitte warte 5 Minuten.');
+            $this->redirect($back);
+        }
+        // Jede Anfrage zählt als "Fehlversuch" für das Rate-Limit — sonst
+        // könnte man beliebig oft Codes an ein fremdes Postfach schicken.
+        $throttle->recordFailure($username, $ip);
+
+        $user = $this->findLoginUser($username, $school);
+        if ($user !== null && !empty($user['email'])) {
+            $codeService = new LoginCodeService($this->ctx->db);
+            if (!$codeService->withinCooldown((int) $user['id'])) {
+                $code = $codeService->issue((int) $user['id'], $ip);
+                $this->emailService()->sendLoginCode($user, $code);
+                $this->ctx->audit->log(
+                    'Anmeldecode angefordert',
+                    'info',
+                    "Benutzer: {$username}",
+                    $user['school_id'] !== null ? (int) $user['school_id'] : ($school['id'] ?? null),
+                    (int) $user['id'],
+                    $username,
+                );
+            } else {
+                // Bewusst kein Hinweis auf den Cooldown nach außen — sonst liesse sich
+                // daraus ablesen, dass das Konto (mit E-Mail) existiert.
+                $this->ctx->audit->log('Anmeldecode-Anfrage übersprungen (Cooldown)', 'info', "Benutzer: {$username}", $school['id'] ?? null, (int) $user['id'], $username);
+            }
+        } else {
+            // Absichtlich keine Unterscheidung nach außen: unbekannter Benutzername
+            // oder fehlende E-Mail sehen für den Aufrufer gleich aus.
+            $this->ctx->audit->log('Anmeldecode angefordert (kein Versand möglich)', 'info', "Benutzer: {$username}", $school['id'] ?? null);
+        }
+
+        $this->ctx->session->set(self::CODE_SESSION_KEY, $username);
+        $this->flash('info', 'Falls das Konto existiert und eine E-Mail-Adresse hinterlegt ist, haben wir einen Code verschickt.');
+        $verifyUrl = $school !== null ? $this->ctx->schoolUrl('/login-code/bestaetigen') : $this->ctx->url('/login-code/bestaetigen');
+        $this->redirect($verifyUrl . ($redirect !== null ? '?redirect=' . rawurlencode($redirect) : ''));
+    }
+
+    /** GET /login-code/bestaetigen und GET /{school}/login-code/bestaetigen */
+    public function showCodeVerify(array $params): string
+    {
+        $school = isset($params['school']) ? $this->ctx->loadSchool($params['school']) : null;
+        if ($this->ctx->auth->check()) {
+            $this->redirect($this->afterLoginUrl($this->ctx->auth->user()));
+        }
+        $username = (string) ($this->ctx->session->get(self::CODE_SESSION_KEY) ?? '');
+        if ($username === '') {
+            $this->redirect($school !== null ? $this->ctx->schoolUrl('/login-code') : $this->ctx->url('/login-code'));
+        }
+
+        return $this->render('pages/auth/login-code-verify', [
+            'title' => 'Code eingeben',
+            'username' => $username,
+            'redirect' => $this->safeRedirectTarget($_GET['redirect'] ?? null),
+        ], 'minimal');
+    }
+
+    /** POST /login-code/bestaetigen und POST /{school}/login-code/bestaetigen */
+    public function verifyCode(array $params): string
+    {
+        $school = isset($params['school']) ? $this->ctx->loadSchool($params['school']) : null;
+        $this->requireCsrf();
+
+        $username = (string) ($this->ctx->session->get(self::CODE_SESSION_KEY) ?? '');
+        $code = trim((string) ($_POST['code'] ?? ''));
+        $ip = Audit::clientIp();
+        $verifyUrl = $school !== null ? $this->ctx->schoolUrl('/login-code/bestaetigen') : $this->ctx->url('/login-code/bestaetigen');
+
+        if ($username === '') {
+            $this->redirect($school !== null ? $this->ctx->schoolUrl('/login-code') : $this->ctx->url('/login-code'));
+        }
+
+        $throttle = new LoginThrottle($this->ctx->db);
+        if ($throttle->isBlocked($username, $ip)) {
+            $this->ctx->audit->log('Code-Anmeldung blockiert (Rate-Limit)', 'warning', "Benutzer: {$username}", $school['id'] ?? null);
+            $this->flash('error', 'Zu viele Versuche. Bitte warte 5 Minuten.');
+            $this->redirect($verifyUrl);
+        }
+
+        $user = $this->findLoginUser($username, $school);
+        $valid = $code !== '' && $user !== null
+            && (new LoginCodeService($this->ctx->db))->verify((int) $user['id'], $code);
+
+        if (!$valid) {
+            $throttle->recordFailure($username, $ip);
+            $this->ctx->audit->log('Code-Anmeldung fehlgeschlagen', 'warning', "Benutzer: {$username}", $school['id'] ?? null);
+            $this->flash('error', 'Der Code ist ungültig oder abgelaufen.');
+            $this->redirect($verifyUrl);
+        }
+
+        $throttle->clear($username);
+        $this->ctx->session->remove(self::CODE_SESSION_KEY);
+        $this->ctx->auth->loginAs($user);
+        // Merkt sich für diese Session, dass die Anmeldung per Code kam — damit
+        // in /passwort-aendern ein neues Passwort ohne Kenntnis des alten
+        // (eben vergessenen) gesetzt werden kann.
+        $this->ctx->session->set(self::CODE_LOGIN_FLAG, true);
+        $this->ctx->audit->log(
+            'Code-Anmeldung erfolgreich',
             'info',
             "Benutzer: {$username} (Rolle: {$user['role']})",
             $user['school_id'] !== null ? (int) $user['school_id'] : ($school['id'] ?? null),
@@ -143,6 +296,7 @@ final class AuthController extends Controller
         return $this->render('pages/auth/change-password', [
             'title' => 'Passwort ändern',
             'forced' => (int) $user['must_change_password'] === 1,
+            'viaCode' => $this->ctx->session->get(self::CODE_LOGIN_FLAG) === true,
         ], 'minimal');
     }
 
@@ -160,7 +314,10 @@ final class AuthController extends Controller
         $confirm = (string) ($_POST['password_confirm'] ?? '');
 
         $forced = (int) $user['must_change_password'] === 1;
-        if (!$forced && ($user['password'] === null || !password_verify($current, (string) $user['password']))) {
+        // Wer per Code angemeldet ist, hat sein Passwort per Definition vergessen —
+        // das alte Passwort abzufragen wäre hier sinnlos.
+        $skipCurrent = $forced || $this->ctx->session->get(self::CODE_LOGIN_FLAG) === true;
+        if (!$skipCurrent && ($user['password'] === null || !password_verify($current, (string) $user['password']))) {
             $this->flash('error', 'Das aktuelle Passwort ist falsch.');
             $this->redirect($this->ctx->url('/passwort-aendern'));
         }
@@ -334,6 +491,11 @@ final class AuthController extends Controller
             ? $this->ctx->schoolUrl('/login')
             : $this->ctx->url('/login');
         $this->redirect($target);
+    }
+
+    private function emailService(): EmailService
+    {
+        return new EmailService($this->ctx->db, new Mailer($this->ctx->config['mail']), $this->ctx->view);
     }
 
     private function validateNewPassword(string $password, string $confirm): ?string

@@ -29,4 +29,15 @@ return [
         'max_logo_bytes' => 2 * 1024 * 1024,
         'max_document_bytes' => 10 * 1024 * 1024,
     ],
+    // E-Mail-Versand (Anmeldecode, Test-Mail). MAIL_HOST leer = Versand
+    // bleibt deaktiviert, Formulare zeigen das entsprechend an.
+    'mail' => [
+        'host' => $env('MAIL_HOST', ''),
+        'port' => (int) $env('MAIL_PORT', '587'),
+        'encryption' => $env('MAIL_ENCRYPTION', 'tls'),
+        'username' => $env('MAIL_USER', ''),
+        'password' => $env('MAIL_PASS', ''),
+        'from_address' => $env('MAIL_FROM_ADDRESS', ''),
+        'from_name' => $env('MAIL_FROM_NAME', 'Berufsmesse'),
+    ],
 ];

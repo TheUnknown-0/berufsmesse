@@ -24,6 +24,8 @@ return static function (Router $r): void {
     $r->post('/global-admin/aussteller-konten/{id}/passwort', [GlobalAdminController::class, 'resetAccountPassword']);
     $r->post('/global-admin/aussteller-konten/{id}/loeschen', [GlobalAdminController::class, 'deleteAccount']);
     $r->get('/global-admin/logs', [AuditLogController::class, 'globalIndex']);
+    $r->get('/global-admin/email-log', [GlobalAdminController::class, 'emailLog']);
+    $r->post('/global-admin/email-log/test', [GlobalAdminController::class, 'sendTestEmail']);
 
     // Global-Administratoren — hier und NUR hier werden admin-Konten verwaltet.
     $r->get('/global-admin/administratoren', [GlobalAdminsController::class, 'index']);

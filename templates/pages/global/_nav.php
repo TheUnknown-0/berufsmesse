@@ -7,6 +7,7 @@ $globalTabs = [
     '/global-admin/aussteller-konten' => 'Aussteller-Konten',
     '/global-admin/administratoren' => 'Administratoren',
     '/global-admin/logs' => 'Logs',
+    '/global-admin/email-log' => 'E-Mail',
 ];
 ?>
 <div class="tabs">

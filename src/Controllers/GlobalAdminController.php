@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Services\EmailService;
+use App\Services\Mailer;
+
 /**
- * Global-Admin: schulübergreifende Übersicht und systemweite
- * Aussteller-Konten. Ausschließlich für die Rolle admin (requireAdmin).
+ * Global-Admin: schulübergreifende Übersicht, systemweite
+ * Aussteller-Konten und E-Mail-Versand. Ausschließlich für die Rolle admin
+ * (requireAdmin).
  */
 final class GlobalAdminController extends Controller
 {
@@ -130,6 +134,51 @@ final class GlobalAdminController extends Controller
             'inviteBaseUrl' => $this->ctx->publicUrl('/aussteller-einladung?token='),
             'oneTimePassword' => is_array($oneTimePassword) ? $oneTimePassword : null,
         ]);
+    }
+
+    // ------------------------------------------------ E-Mail-Versand
+
+    /** GET /global-admin/email-log */
+    public function emailLog(array $params): string
+    {
+        $this->requireAdmin();
+
+        $service = $this->emailService();
+
+        return $this->render('pages/global/email-log', [
+            'title' => 'E-Mail-Versand',
+            'configured' => $service->isConfigured(),
+            'log' => $service->recentLog(),
+        ]);
+    }
+
+    /** POST /global-admin/email-log/test — Test-Mail an eine beliebige Adresse. */
+    public function sendTestEmail(array $params): string
+    {
+        $this->requireAdmin();
+        $this->requireCsrf();
+        $back = $this->ctx->url('/global-admin/email-log');
+
+        $to = trim((string) ($_POST['to'] ?? ''));
+        if ($to === '' || filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+            $this->flash('error', 'Bitte gib eine gültige E-Mail-Adresse an.');
+            $this->redirect($back);
+        }
+
+        $result = $this->emailService()->sendTest($to);
+        if ($result['success']) {
+            $this->ctx->audit->log('Test-Mail versendet', 'info', 'Empfänger: ' . $to);
+            $this->flash('success', 'Test-Mail wurde versendet.');
+        } else {
+            $this->ctx->audit->log('Test-Mail fehlgeschlagen', 'error', $result['error'] ?? '');
+            $this->flash('error', 'Versand fehlgeschlagen: ' . ($result['error'] ?? 'Unbekannter Fehler'));
+        }
+        $this->redirect($back);
+    }
+
+    private function emailService(): EmailService
+    {
+        return new EmailService($this->ctx->db, new Mailer($this->ctx->config['mail']), $this->ctx->view);
     }
 
     // ------------------------------------------------ Konten bearbeiten

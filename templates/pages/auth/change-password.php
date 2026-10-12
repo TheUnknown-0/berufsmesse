@@ -1,13 +1,15 @@
-<?php /** Passwortwechsel. Erwartet: $forced (bool). */ ?>
+<?php /** Passwortwechsel. Erwartet: $forced (bool), $viaCode (bool). */ ?>
 <h1 style="font-size:1.35rem;">Passwort ändern</h1>
 <?php if ($forced): ?>
     <div class="alert alert-warning">Bitte lege zunächst ein neues Passwort fest, bevor du weiterarbeitest.</div>
+<?php elseif ($viaCode): ?>
+    <div class="alert alert-info">Du bist per Anmeldecode angemeldet — dein altes Passwort ist nicht nötig.</div>
 <?php endif; ?>
 
 <form method="post" action="">
     <?= $csrf->field() ?>
 
-    <?php if (!$forced): ?>
+    <?php if (!$forced && !$viaCode): ?>
         <div class="field">
             <label for="current_password">Aktuelles Passwort</label>
             <input class="input" type="password" id="current_password" name="current_password" required autocomplete="current-password">

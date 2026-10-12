@@ -27,6 +27,14 @@
     <button class="btn btn-primary btn-block btn-lg" type="submit">Anmelden</button>
 </form>
 
+<?php if ($codeLoginAvailable): ?>
+    <p class="text-center text-sm mt-2">
+        <a href="<?= e(($ctx->school !== null ? $ctx->schoolUrl('/login-code') : $ctx->url('/login-code')) . (!empty($redirect) ? '?redirect=' . rawurlencode($redirect) : '')) ?>">
+            Anmeldung per Code (auch bei vergessenem Passwort)
+        </a>
+    </p>
+<?php endif; ?>
+
 <?php if ($ctx->school !== null): ?>
     <?php $regOpen = $ctx->settings->getBool('registration_page_enabled', $ctx->schoolId()); ?>
     <?php if ($regOpen): ?>
