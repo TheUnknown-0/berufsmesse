@@ -27,6 +27,11 @@ final class AutoAssign
     ) {
     }
 
+    private function held(): HeldRegistrations
+    {
+        return new HeldRegistrations($this->db);
+    }
+
     /**
      * IDs der festen Zuteilungsslots einer Edition, in Slot-Reihenfolge.
      *
@@ -135,6 +140,8 @@ final class AutoAssign
                     'UPDATE registrations SET timeslot_id = ? WHERE id = ? AND edition_id = ?',
                     [$bestSlot, $registrationId, $editionId],
                 );
+                // Neue Buchung im Slot: eine dort ruhende (Absage) ist überholt.
+                $this->held()->clearSlot($editionId, $userId, $bestSlot);
                 $this->capacity->reserve($editionId, $exhibitorId, $bestSlot);
                 $taken[$userId][$bestSlot] = true;
                 $stats['assigned']++;
@@ -233,6 +240,7 @@ final class AutoAssign
                          VALUES (?, ?, ?, ?, \'automatic\', NULL)',
                         [$editionId, $userId, $bestExhibitor, $slotId],
                     );
+                    $this->held()->clearSlot($editionId, $userId, $slotId);
                     $this->capacity->reserve($editionId, $bestExhibitor, $slotId);
                     $slotsByUser[$userId][$slotId] = true;
                     $exhibitorsByUser[$userId][$bestExhibitor] = true;

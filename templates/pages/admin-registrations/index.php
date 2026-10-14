@@ -202,6 +202,22 @@ $studentUrl = static fn (int $id): string => $ctx->schoolUrl('/admin/anmeldungen
                     </table>
                 </div>
             <?php endif; ?>
+            <?php if (($held ?? []) !== []): ?>
+                <h3 style="margin:16px 0 8px;">Ruhende Buchungen</h3>
+                <p class="text-sm text-soft">
+                    Diese Aussteller haben abgesagt. Sobald du im selben Slot neu zuteilst, wird die ruhende Buchung gelöscht.
+                </p>
+                <ul class="text-sm">
+                    <?php foreach ($held as $row): ?>
+                        <li>
+                            <s><?= e($row['exhibitor_name']) ?></s>,
+                            <?= $row['timeslot_id'] !== null
+                                ? e(($row['slot_name'] ?? ('Slot ' . (int) $row['slot_number'])))
+                                : 'offener Wunsch' ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 

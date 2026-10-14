@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\ExhibitorProfile;
 use App\Services\Uploads;
 
 /**
@@ -18,11 +19,6 @@ use App\Services\Uploads;
  */
 final class ExhibitorDocumentsController extends Controller
 {
-    /** Zugelassene Dateiendungen für Aussteller-Dokumente. */
-    private const DOCUMENT_EXTENSIONS = [
-        'pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'webp',
-    ];
-
     /** POST /{school}/admin/aussteller/{id}/dokumente */
     public function upload(array $params): string
     {
@@ -51,7 +47,7 @@ final class ExhibitorDocumentsController extends Controller
             $stored = $uploads->store(
                 $file,
                 'documents',
-                self::DOCUMENT_EXTENSIONS,
+                ExhibitorProfile::DOCUMENT_EXTENSIONS,
                 (int) ($this->ctx->config['uploads']['max_document_bytes'] ?? 10485760),
             );
         } catch (HttpException $e) {

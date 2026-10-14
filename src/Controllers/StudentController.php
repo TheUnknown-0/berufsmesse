@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Core\HttpException;
 use App\Core\Permissions;
 use App\Services\Announcements;
+use App\Services\HeldRegistrations;
 use DateTimeImmutable;
 
 /**
@@ -125,6 +126,15 @@ final class StudentController extends Controller
             $bySlot[(int) $row['timeslot_id']] = $row;
         }
 
+        // Ruhende Buchungen (Aussteller hat abgesagt), damit der Slot nicht
+        // kommentarlos leer erscheint.
+        $heldBySlot = [];
+        foreach ((new HeldRegistrations($this->ctx->db))->forUser($editionId, $userId) as $row) {
+            if ($row['timeslot_id'] !== null) {
+                $heldBySlot[(int) $row['timeslot_id']] = $row;
+            }
+        }
+
         $timeline = [];
         foreach ($slots as $slot) {
             $slotId = (int) $slot['id'];
@@ -132,6 +142,7 @@ final class StudentController extends Controller
                 ? 'break'
                 : ((int) $slot['is_managed'] === 1 ? 'managed' : 'free');
             $slot['registration'] = $bySlot[$slotId] ?? null;
+            $slot['held'] = $slot['registration'] === null ? ($heldBySlot[$slotId] ?? null) : null;
             $timeline[] = $slot;
         }
 

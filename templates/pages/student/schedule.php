@@ -100,6 +100,14 @@ $time = static fn (mixed $t): string => substr((string) $t, 0, 5);
                                             <span class="badge badge-info">Automatisch zugeteilt</span>
                                         <?php endif; ?>
                                     </div>
+                                <?php elseif (!empty($slot['held'])): ?>
+                                    <h3 style="margin-bottom:2px;">
+                                        <s class="text-soft"><?= e($slot['held']['exhibitor_name']) ?></s>
+                                        <span class="badge badge-warning">abgesagt</span>
+                                    </h3>
+                                    <p class="text-sm text-soft mb-0">
+                                        Dieser Aussteller kommt nicht. Die Schule teilt dir für diesen Slot einen neuen Termin zu.
+                                    </p>
                                 <?php else: ?>
                                     <h3 style="margin-bottom:2px;">
                                         <?= e($slot['slot_name'] ?? ('Slot ' . (int) $slot['slot_number'])) ?>

@@ -46,7 +46,8 @@ final class ExhibitorsController extends Controller
 
         // Branchen: Stammdaten + tatsächlich verwendete Namen (auch gelöschte)
         $industryRows = $this->ctx->db->fetchAll(
-            'SELECT name FROM industries ORDER BY sort_order ASC, name ASC',
+            'SELECT name FROM industries WHERE school_id = ? ORDER BY sort_order ASC, name ASC',
+            [(int) $this->ctx->schoolId()],
         );
         $branchen = array_map(static fn (array $row): string => (string) $row['name'], $industryRows);
 

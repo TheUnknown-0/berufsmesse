@@ -7,13 +7,23 @@ namespace App\Services;
 use App\Core\Context;
 
 /**
- * Absage-Workflow für Aussteller.
+ * Zentraler Absage-Ablauf für Aussteller.
  *
- * Kurzfristige Absagen (weniger als NOTICE_DAYS Tage vor dem Messetag)
- * müssen von der Schule bestätigt werden; bis dahin bleibt der Aussteller
- * aktiv. Alle anderen Absagen greifen sofort: Aussteller wird deaktiviert,
- * bestehende Anmeldungen werden gelöst und die betroffenen Schüler:innen
- * bekommen eine In-App-Benachrichtigung.
+ * JEDE Absage läuft hier durch, egal wer sie auslöst: das Unternehmen im
+ * Portal, die Schule (Knopf „Absage durch Schule“ oder Pipeline auf einen
+ * unsichtbaren Status) oder das Ausfall-Management am Messetag. So hat eine
+ * Absage überall dieselben Folgen:
+ *  - Aussteller unsichtbar, Pipeline-Status passend gesetzt,
+ *  - Buchungen der Schüler:innen werden zu ruhenden Buchungen
+ *    (Services\HeldRegistrations); gelöscht wird erst, wenn die Schule neu
+ *    zuteilt,
+ *  - Verknüpfungen der Firmenkonten werden beendet,
+ *  - Schüler:innen und Firmenkonten erfahren es in der App.
+ *
+ * restore() nimmt eine Absage zurück und holt die ruhenden Buchungen zurück.
+ *
+ * Kurzfristige Absagen aus dem Portal (weniger als NOTICE_DAYS Tage vor dem
+ * Messetag) muss die Schule bestätigen; bis dahin bleibt alles, wie es ist.
  */
 final class CancellationService
 {
@@ -21,10 +31,12 @@ final class CancellationService
     public const NOTICE_DAYS = 7;
 
     private Notifications $notifications;
+    private HeldRegistrations $held;
 
     public function __construct(private readonly Context $ctx)
     {
         $this->notifications = new Notifications($ctx->db);
+        $this->held = new HeldRegistrations($ctx->db);
     }
 
     /** Tage bis zum Messetag (negativ = vorbei); null, wenn kein Datum hinterlegt ist. */
@@ -112,10 +124,11 @@ final class CancellationService
     }
 
     /**
-     * Führt die Absage endgültig aus: Aussteller deaktivieren, Verknüpfungen
-     * abschließen, Anmeldungen lösen, Schüler:innen benachrichtigen.
+     * Führt die Absage aus (siehe Klassenkommentar).
      *
-     * @param 'cancelled_by_exhibitor'|'cancelled_by_school' $linkStatus
+     * @param 'cancelled_by_exhibitor'|'cancelled_by_school'|'failover' $cause
+     * @param string $pipelineStatus Zielstatus in der Pipeline (unsichtbare Stufe)
+     * @param bool $notifyStudents false, wenn der Aufrufer selbst informiert (Ausfall mit Umbuchung)
      * @return int Anzahl der betroffenen Schüler:innen
      */
     public function execute(
@@ -123,30 +136,43 @@ final class CancellationService
         array $edition,
         int $schoolId,
         string $reason,
-        string $linkStatus = 'cancelled_by_exhibitor',
-        ?int $confirmedBy = null,
+        string $cause = 'cancelled_by_exhibitor',
+        ?int $actorId = null,
+        string $pipelineStatus = 'cancelled',
+        bool $notifyStudents = true,
     ): int {
         $exhibitorId = (int) $exhibitor['id'];
         $editionId = (int) $edition['id'];
-        $linkStatus = $linkStatus === 'cancelled_by_school' ? 'cancelled_by_school' : 'cancelled_by_exhibitor';
+        $cause = in_array($cause, HeldRegistrations::CAUSES, true) ? $cause : 'cancelled_by_school';
+        $linkStatus = $cause === 'cancelled_by_exhibitor' ? 'cancelled_by_exhibitor' : 'cancelled_by_school';
+        $pipelineStatus = in_array($pipelineStatus, ['lead', 'contacted', 'declined', 'cancelled'], true)
+            ? $pipelineStatus
+            : 'cancelled';
 
-        $affected = $this->ctx->db->transaction(function () use (
+        [$affected, $accounts] = $this->ctx->db->transaction(function () use (
             $exhibitorId,
             $editionId,
             $reason,
+            $cause,
             $linkStatus,
-            $confirmedBy,
+            $actorId,
+            $pipelineStatus,
         ): array {
-            $students = $this->ctx->db->fetchAll(
-                'SELECT DISTINCT user_id FROM registrations WHERE exhibitor_id = ? AND edition_id = ?',
-                [$exhibitorId, $editionId],
+            $accounts = array_map(
+                static fn (array $r): int => (int) $r['user_id'],
+                $this->ctx->db->fetchAll(
+                    'SELECT user_id FROM exhibitor_users WHERE exhibitor_id = ? AND status = \'active\'',
+                    [$exhibitorId],
+                ),
             );
 
-            // Wie beim Ausfall (Services\Rebooking): Sichtbarkeit und Pipeline gehören zusammen,
-            // sonst stünde ein abgesagter Aussteller in der Pipeline weiter auf „Zugesagt“.
+            $students = $this->held->hold($editionId, $exhibitorId, $cause, $reason, $actorId);
+
+            // Sichtbarkeit und Pipeline gehören zusammen, sonst stünde ein
+            // abgesagter Aussteller in der Pipeline weiter auf „Zugesagt“.
             $this->ctx->db->run(
-                "UPDATE exhibitors SET active = 0, pipeline_status = 'cancelled' WHERE id = ? AND edition_id = ?",
-                [$exhibitorId, $editionId],
+                'UPDATE exhibitors SET active = 0, pipeline_status = ? WHERE id = ? AND edition_id = ?',
+                [$pipelineStatus, $exhibitorId, $editionId],
             );
             $this->ctx->db->run(
                 'UPDATE exhibitor_users
@@ -155,46 +181,55 @@ final class CancellationService
                 [$linkStatus, mb_substr($reason, 0, 500), $exhibitorId],
             );
             $this->ctx->db->run(
-                'DELETE FROM registrations WHERE exhibitor_id = ? AND edition_id = ?',
-                [$exhibitorId, $editionId],
-            );
-            $this->ctx->db->run(
                 'UPDATE cancellation_requests
                  SET status = \'confirmed\', confirmed_at = NOW(), confirmed_by = ?
                  WHERE exhibitor_id = ? AND status = \'pending\'',
-                [$confirmedBy, $exhibitorId],
+                [$actorId, $exhibitorId],
             );
 
-            return array_map(static fn (array $r): int => (int) $r['user_id'], $students);
+            return [$students, $accounts];
         });
 
-        // Bei geschlossener Einschreibung passiert NICHTS von selbst: Ein
-        // Ersatzplatz entsteht erst, wenn die Organisation den Auffüll-Lauf
-        // startet. Vorher versprach die Meldung eine automatische Zuteilung —
-        // Schüler:innen verließen sich darauf und standen ohne Termin da.
-        $registrationOpen = $this->registrationOpen($edition);
-        $message = 'Der Aussteller „' . $exhibitor['name'] . '" hat abgesagt. Deine Anmeldung wurde entfernt. '
-            . ($registrationOpen
-                ? 'Bitte wähle einen neuen Aussteller.'
-                : 'Die Organisation prüft, ob ein Ersatzplatz möglich ist, und meldet sich. '
-                    . 'Bitte sieh in deinem Tagesplan nach, ob der Termin ersetzt wurde.');
+        $name = (string) $exhibitor['name'];
+        if ($notifyStudents) {
+            $this->notifications->sendMany(
+                $affected,
+                $schoolId,
+                ($cause === 'cancelled_by_exhibitor'
+                    ? 'Der Aussteller „' . $name . '“ hat abgesagt.'
+                    : 'Der Aussteller „' . $name . '“ nimmt nicht an der Messe teil.')
+                . ' Deine Buchung dort ruht vorerst. Die Schule teilt dir einen neuen Termin zu;'
+                . ' bitte sieh in deinem Tagesplan nach.',
+                'exhibitor_cancelled',
+                $exhibitorId,
+                $this->schoolUrl($schoolId, '/tagesplan'),
+            );
+        }
 
-        $this->notifications->sendMany(
-            $affected,
-            $schoolId,
-            $message,
-            'exhibitor_cancelled',
-            $exhibitorId,
-            $this->schoolUrl($schoolId, $registrationOpen ? '/einschreibung' : '/meine-anmeldungen'),
-        );
+        // Hat die Schule beendet, erfährt es auch das Unternehmen selbst.
+        if ($cause !== 'cancelled_by_exhibitor') {
+            $this->notifications->sendMany(
+                $accounts,
+                $schoolId,
+                'Die Schule hat die Teilnahme von „' . $name . '“ beendet.'
+                    . ($reason !== '' ? ' Begründung: ' . $reason : ''),
+                'school_cancelled',
+                $exhibitorId,
+            );
+        }
 
         $this->ctx->audit->log(
             'Aussteller abgesagt',
             'warning',
             sprintf(
-                'Aussteller: %s (ID %d) — %d Anmeldung(en) entfernt — Begründung: %s',
-                (string) $exhibitor['name'],
+                'Aussteller: %s (ID %d), ausgelöst durch: %s, %d Schüler:innen mit ruhender Buchung, Begründung: %s',
+                $name,
                 $exhibitorId,
+                match ($cause) {
+                    'cancelled_by_exhibitor' => 'Unternehmen',
+                    'failover' => 'Ausfall am Messetag',
+                    default => 'Schule',
+                },
                 count($affected),
                 $reason,
             ),
@@ -202,6 +237,76 @@ final class CancellationService
         );
 
         return count($affected);
+    }
+
+    /**
+     * Nimmt eine Absage zurück: Aussteller wieder sichtbar und „Zugesagt“,
+     * ruhende Buchungen und beendete Firmenkonten-Verknüpfungen wieder aktiv.
+     * Von Hand entfernte Verknüpfungen (removed_by_admin) bleiben entfernt.
+     *
+     * @return array{restored: int, blocked: int}
+     */
+    public function restore(array $exhibitor, array $edition, int $schoolId): array
+    {
+        $exhibitorId = (int) $exhibitor['id'];
+        $editionId = (int) $edition['id'];
+
+        [$result, $accounts] = $this->ctx->db->transaction(function () use ($exhibitorId, $editionId): array {
+            $accounts = array_map(
+                static fn (array $r): int => (int) $r['user_id'],
+                $this->ctx->db->fetchAll(
+                    'SELECT user_id FROM exhibitor_users
+                     WHERE exhibitor_id = ? AND status IN (\'cancelled_by_exhibitor\', \'cancelled_by_school\')',
+                    [$exhibitorId],
+                ),
+            );
+
+            $this->ctx->db->run(
+                'UPDATE exhibitors SET active = 1, pipeline_status = \'confirmed\' WHERE id = ? AND edition_id = ?',
+                [$exhibitorId, $editionId],
+            );
+            $this->ctx->db->run(
+                'UPDATE exhibitor_users
+                 SET status = \'active\', cancelled_at = NULL, cancel_reason = NULL
+                 WHERE exhibitor_id = ? AND status IN (\'cancelled_by_exhibitor\', \'cancelled_by_school\')',
+                [$exhibitorId],
+            );
+
+            return [$this->held->restore($editionId, $exhibitorId), $accounts];
+        });
+
+        $name = (string) $exhibitor['name'];
+        $this->notifications->sendMany(
+            $result['restored'],
+            $schoolId,
+            'Gute Nachricht: „' . $name . '“ ist doch dabei. Deine Buchung dort gilt wieder.',
+            'info',
+            $exhibitorId,
+            $this->schoolUrl($schoolId, '/tagesplan'),
+        );
+        $this->notifications->sendMany(
+            $accounts,
+            $schoolId,
+            'Die Absage von „' . $name . '“ wurde zurückgenommen. Du hast wieder Zugriff im Portal.',
+            'info',
+            $exhibitorId,
+            $this->schoolUrl($schoolId, '/portal'),
+        );
+
+        $this->ctx->audit->log(
+            'Absage zurückgenommen',
+            'warning',
+            sprintf(
+                'Aussteller: %s (ID %d), %d Schüler:innen wieder gebucht, %d Buchungen bleiben ruhend (Slot inzwischen belegt)',
+                $name,
+                $exhibitorId,
+                count($result['restored']),
+                $result['blocked'],
+            ),
+            $schoolId,
+        );
+
+        return ['restored' => count($result['restored']), 'blocked' => $result['blocked']];
     }
 
     /** Lehnt eine offene Absage-Anfrage ab und benachrichtigt den Antragsteller. */
@@ -231,21 +336,6 @@ final class CancellationService
             'Aussteller: ' . (string) $exhibitor['name'],
             $schoolId,
         );
-    }
-
-    /** Läuft die Einschreibung aktuell noch? */
-    private function registrationOpen(array $edition): bool
-    {
-        $end = $edition['registration_end'] ?? null;
-        if (!is_string($end) || $end === '') {
-            return true;
-        }
-
-        try {
-            return new \DateTimeImmutable($end) >= new \DateTimeImmutable('now');
-        } catch (\Exception) {
-            return true;
-        }
     }
 
     /** Absolute URL innerhalb einer Schule (unabhängig vom aktuellen Kontext). */

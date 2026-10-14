@@ -1,12 +1,11 @@
 <?php
 /**
  * Global-Admin — alle Aussteller-Konten systemweit, inkl. Bearbeitung.
- * Erwartet: $links, $filter, $search, $inviteBaseUrl, $oneTimePassword.
+ * Erwartet: $links, $filter, $search, $oneTimePassword.
  */
 $filters = [
     'alle' => 'Alle',
     'aktiv' => 'Aktiv',
-    'einladung' => 'Einladung ausstehend',
     'abgesagt' => 'Abgesagt / entfernt',
 ];
 $statusLabels = [
@@ -107,14 +106,6 @@ foreach ($links as $link) {
                     <td>
                         <?php if ($link['status'] !== 'active'): ?>
                             <span class="badge badge-danger"><?= e($statusLabels[$link['status']] ?? $link['status']) ?></span>
-                        <?php elseif ((int) $link['invite_accepted'] === 0): ?>
-                            <span class="badge badge-warning">Einladung ausstehend</span>
-                            <?php if (!empty($link['invite_token'])): ?>
-                                <input class="input text-sm mono" style="margin-top:6px;min-width:180px;" readonly
-                                       value="<?= e($inviteBaseUrl . $link['invite_token']) ?>"
-                                       data-copy-source
-                                       aria-label="Einladungslink für <?= e($link['username']) ?>">
-                            <?php endif; ?>
                         <?php else: ?>
                             <span class="badge badge-success">Aktiv</span>
                         <?php endif; ?>
@@ -131,10 +122,6 @@ foreach ($links as $link) {
                             <div class="menu">
                                 <button class="btn btn-sm" type="button" data-menu-toggle aria-label="Weitere Aktionen">⋯</button>
                                 <div class="menu-list" hidden>
-                                    <form method="post" action="<?= e($ctx->url('/global-admin/aussteller-konten/verknuepfung/' . (int) $link['id'] . '/erneuern')) ?>">
-                                        <?= $csrf->field() ?>
-                                        <button class="menu-item" type="submit">🔄 Einladungslink erneuern</button>
-                                    </form>
                                     <?php if ($link['status'] === 'active'): ?>
                                         <form method="post" action="<?= e($ctx->url('/global-admin/aussteller-konten/verknuepfung/' . (int) $link['id'] . '/entfernen')) ?>"
                                               data-confirm="Verknüpfung zu <?= e($link['exhibitor_name']) ?> wirklich entfernen?">

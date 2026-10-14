@@ -137,6 +137,7 @@ final class AttendanceService
                      WHERE id = ? AND edition_id = ?',
                     [$timeslotId, (int) $existing['id'], $editionId],
                 );
+                (new HeldRegistrations($this->db))->clearSlot($editionId, $userId, $timeslotId);
             }
 
             return null;
@@ -147,6 +148,9 @@ final class AttendanceService
              VALUES (?, ?, ?, ?, \'qr_checkin\')',
             [$editionId, $userId, $exhibitorId, $timeslotId],
         );
+        // Wer in einem Slot eincheckt, ist dort neu gebucht: Eine ruhende
+        // Buchung aus einer Absage ist damit überholt.
+        (new HeldRegistrations($this->db))->clearSlot($editionId, $userId, $timeslotId);
 
         return null;
     }

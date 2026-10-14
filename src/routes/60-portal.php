@@ -37,6 +37,7 @@ return static function (Router $r): void {
     // Aussteller-Konten & Einladungen (Admin-Seite, nicht in der Sidebar verlinkt)
     $r->get('/{school}/admin/aussteller-konten', [PortalController::class, 'accounts']);
     $r->post('/{school}/admin/aussteller-konten/einladen', [PortalController::class, 'invite']);
+    $r->post('/{school}/admin/aussteller-konten/einladung/{id}/zurueckziehen', [PortalController::class, 'revokeInvite']);
     $r->post('/{school}/admin/aussteller-konten/{id}/rechte', [PortalController::class, 'updateRights']);
     $r->post('/{school}/admin/aussteller-konten/{id}/entfernen', [PortalController::class, 'removeLink']);
     $r->post('/{school}/admin/aussteller-konten/absage/{id}/bestaetigen', [PortalController::class, 'confirmCancellation']);

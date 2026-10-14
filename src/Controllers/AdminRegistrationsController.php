@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\Permissions;
 use App\Services\Capacity;
+use App\Services\HeldRegistrations;
 use App\Services\Notifications;
 use App\Services\Waitlist;
 
@@ -80,6 +81,9 @@ final class AdminRegistrationsController extends Controller
             'students' => $students,
             'student' => $student,
             'registrations' => $registrations,
+            'held' => $student !== null
+                ? (new HeldRegistrations($this->ctx->db))->forUser($editionId, $studentId)
+                : [],
             'exhibitors' => $this->ctx->db->fetchAll(
                 'SELECT id, name, active FROM exhibitors WHERE edition_id = ? ORDER BY active DESC, name',
                 [$editionId],
@@ -163,6 +167,10 @@ final class AdminRegistrationsController extends Controller
              VALUES (?, ?, ?, ?, \'manual\', ?)',
             [$editionId, $studentId, $exhibitorId, $timeslotId, $priority],
         );
+        // Neu zugeteilt: eine in diesem Slot ruhende Buchung (Absage) ist überholt.
+        if ($timeslotId !== null) {
+            (new HeldRegistrations($this->ctx->db))->clearSlot($editionId, $studentId, $timeslotId);
+        }
 
         $this->ctx->audit->log(
             'Anmeldung manuell erstellt',
@@ -227,6 +235,9 @@ final class AdminRegistrationsController extends Controller
             'UPDATE registrations SET timeslot_id = ? WHERE id = ? AND edition_id = ?',
             [$timeslotId, $registrationId, $editionId],
         );
+        if ($timeslotId !== null) {
+            (new HeldRegistrations($this->ctx->db))->clearSlot($editionId, (int) $registration['user_id'], $timeslotId);
+        }
 
         // Der verlassene Slot wird frei — dort rückt jemand nach. Ohne diesen
         // Aufruf bliebe der Platz trotz Warteliste leer (dieselbe Regel wie

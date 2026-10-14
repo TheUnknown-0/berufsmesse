@@ -8,6 +8,8 @@ use App\Core\HttpException;
 use App\Core\Permissions;
 use App\Services\CancellationService;
 use App\Services\Capacity;
+use App\Services\ExhibitorInvitations;
+use App\Services\ExhibitorProfile;
 use App\Services\Uploads;
 
 /**
@@ -21,14 +23,6 @@ use App\Services\Uploads;
  */
 final class PortalController extends Controller
 {
-    /** Auswählbare Angebotstypen (zusätzlich ist ein Freitext möglich). */
-    private const OFFER_TYPES = ['Ausbildung', 'Duales Studium', 'Praktikum'];
-
-    private const LOGO_MAX_BYTES = 2097152; // 2 MB
-    private const LOGO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-
-    private const INVITE_VALID_DAYS = 14;
-
     // ================= Portal =================
 
     /** GET /{school}/portal */
@@ -78,7 +72,7 @@ final class PortalController extends Controller
         return $this->render('pages/portal/profil', [
             'title' => 'Profil: ' . (string) $exhibitor['name'],
             'exhibitor' => $exhibitor,
-            'offerTypes' => self::OFFER_TYPES,
+            'offerTypes' => ExhibitorProfile::OFFER_TYPES,
             'offerSelected' => $offer['selected'],
             'offerCustom' => $offer['custom'],
         ]);
@@ -97,46 +91,41 @@ final class PortalController extends Controller
         $exhibitorId = (int) $exhibitor['id'];
         $back = $this->ctx->schoolUrl('/portal/profil/' . $exhibitorId);
 
-        $shortDescription = $this->text('short_description', 500);
-        $description = $this->text('description', 5000);
-        $contactPerson = $this->text('contact_person', 200);
-        $email = $this->text('email', 255);
-        $phone = $this->text('phone', 50);
-        $website = $this->text('website', 255);
-        $jobs = $this->text('jobs', 5000);
-        $features = $this->text('features', 5000);
+        // Feldregeln und Angebotstypen kommen aus ExhibitorProfile, damit das
+        // Portal nichts verwirft, was die Schule im Admin-Formular gepflegt hat.
+        $shortDescription = ExhibitorProfile::text($_POST['short_description'] ?? null, 'short_description');
+        $description = ExhibitorProfile::text($_POST['description'] ?? null, 'description');
+        $contactPerson = ExhibitorProfile::text($_POST['contact_person'] ?? null, 'contact_person');
+        $email = ExhibitorProfile::text($_POST['email'] ?? null, 'email');
+        $phone = ExhibitorProfile::text($_POST['phone'] ?? null, 'phone');
+        $website = ExhibitorProfile::website($_POST['website'] ?? null);
+        $jobs = ExhibitorProfile::text($_POST['jobs'] ?? null, 'jobs');
+        $features = ExhibitorProfile::text($_POST['features'] ?? null, 'features');
 
         if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $this->flash('error', 'Bitte gib eine gültige E-Mail-Adresse an.');
             $this->redirect($back);
         }
-        if ($website !== null && !preg_match('#^https?://#i', $website)) {
-            $website = 'https://' . $website;
-        }
 
-        // Angebotstypen: nur bekannte Auswahl + Freitext
-        $selected = [];
-        foreach ((array) ($_POST['offer_types'] ?? []) as $value) {
-            if (is_string($value) && in_array($value, self::OFFER_TYPES, true)) {
-                $selected[] = $value;
-            }
-        }
-        $custom = $this->text('offer_types_custom', 500) ?? '';
-        $offerTypes = ($selected === [] && $custom === '')
-            ? null
-            : json_encode(['selected' => array_values(array_unique($selected)), 'custom' => $custom], JSON_UNESCAPED_UNICODE);
+        $offerTypes = ExhibitorProfile::encodeOffers($_POST['offer_types'] ?? [], $_POST['offer_types_custom'] ?? null);
 
         // Logo (optional)
-        $logo = $exhibitor['logo'];
+        $oldLogo = is_string($exhibitor['logo']) && $exhibitor['logo'] !== '' ? $exhibitor['logo'] : null;
+        $logo = $oldLogo;
         $uploads = new Uploads($this->ctx->config['uploads']['dir']);
         if (isset($_FILES['logo']) && ($_FILES['logo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-            $stored = $uploads->store($_FILES['logo'], 'logos', self::LOGO_EXTENSIONS, self::LOGO_MAX_BYTES);
-            $old = is_string($logo) && $logo !== '' ? $logo : null;
-            $logo = $stored['filename'];
-            if ($old !== null) {
-                // Nur loeschen, wenn keine andere Edition dasselbe Bild nutzt.
-                $uploads->deleteLogoIfUnused($this->ctx->db, $old, $exhibitorId);
+            try {
+                $stored = $uploads->store(
+                    $_FILES['logo'],
+                    'logos',
+                    ExhibitorProfile::LOGO_EXTENSIONS,
+                    (int) ($this->ctx->config['uploads']['max_logo_bytes'] ?? 2097152),
+                );
+            } catch (HttpException $e) {
+                $this->flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Das Logo konnte nicht gespeichert werden.');
+                $this->redirect($back);
             }
+            $logo = $stored['filename'];
         }
 
         $this->ctx->db->run(
@@ -150,6 +139,12 @@ final class PortalController extends Controller
                 $exhibitorId, (int) $this->ctx->requireEdition()['id'],
             ],
         );
+
+        // Altes Logo erst nach dem Update entfernen, und nur, wenn keine andere
+        // Edition dieselbe Datei nutzt (Klonen übernimmt den Dateinamen).
+        if ($oldLogo !== null && $logo !== $oldLogo) {
+            $uploads->deleteLogoIfUnused($this->ctx->db, $oldLogo, $exhibitorId);
+        }
 
         $this->ctx->audit->log(
             'Aussteller-Profil im Portal bearbeitet',
@@ -378,8 +373,20 @@ final class PortalController extends Controller
             $this->redirect($back);
         }
 
+        // Gleiche Dateitypen, Größe und Ablage wie beim Upload durch die Schule
         $uploads = new Uploads($this->ctx->config['uploads']['dir']);
-        $stored = $uploads->store($_FILES['document'], 'documents');
+        try {
+            $stored = $uploads->store(
+                $_FILES['document'],
+                'documents',
+                ExhibitorProfile::DOCUMENT_EXTENSIONS,
+                (int) ($this->ctx->config['uploads']['max_document_bytes'] ?? 10485760),
+            );
+        } catch (HttpException $e) {
+            $this->flash('error', $e->getMessage() !== '' ? $e->getMessage() : 'Das Dokument konnte nicht gespeichert werden.');
+            $this->redirect($back);
+        }
+        $extension = strtolower(pathinfo($stored['original_name'], PATHINFO_EXTENSION));
 
         $this->ctx->db->run(
             'INSERT INTO exhibitor_documents
@@ -389,7 +396,7 @@ final class PortalController extends Controller
                 (int) $exhibitor['id'],
                 $stored['filename'],
                 mb_substr($stored['original_name'], 0, 255),
-                $stored['mime'],
+                $extension !== '' ? $extension : null,
                 $stored['size'],
                 isset($_POST['visible_for_students']) ? 1 : 0,
             ],
@@ -505,6 +512,8 @@ final class PortalController extends Controller
             'SELECT id, name, active FROM exhibitors WHERE edition_id = ? ORDER BY name',
             [(int) $edition['id']],
         );
+        // Nur Konten, die eine Einladung dieser Schule angenommen haben.
+        // Konten anderer Schulen bleiben unsichtbar.
         $links = $this->ctx->db->fetchAll(
             'SELECT eu.*, u.username, u.email, u.firstname, u.lastname, e.name AS exhibitor_name
              FROM exhibitor_users eu
@@ -518,6 +527,11 @@ final class PortalController extends Controller
         $byExhibitor = [];
         foreach ($links as $link) {
             $byExhibitor[(int) $link['exhibitor_id']][] = $link;
+        }
+
+        $invitesByExhibitor = [];
+        foreach ((new ExhibitorInvitations($this->ctx->db))->openForEdition((int) $edition['id']) as $invite) {
+            $invitesByExhibitor[(int) $invite['exhibitor_id']][] = $invite;
         }
 
         $requests = $this->ctx->db->fetchAll(
@@ -534,17 +548,19 @@ final class PortalController extends Controller
             'title' => 'Aussteller-Konten',
             'exhibitors' => $exhibitors,
             'linksByExhibitor' => $byExhibitor,
+            'invitesByExhibitor' => $invitesByExhibitor,
             'requests' => $requests,
             'inviteBaseUrl' => $this->ctx->publicUrl('/aussteller-einladung?token='),
-            'existingAccounts' => $this->ctx->db->fetchAll(
-                'SELECT username, firstname, lastname FROM users
-                 WHERE role = \'exhibitor\' AND school_id IS NULL ORDER BY username LIMIT 200',
-            ),
             'pageScripts' => ['portal.js'],
         ]);
     }
 
-    /** POST /{school}/admin/aussteller-konten/einladen */
+    /**
+     * POST /{school}/admin/aussteller-konten/einladen
+     *
+     * Erzeugt nur einen Link für das Unternehmen. Welches Konto ihn annimmt,
+     * entscheidet der Empfänger; die Schule legt keine Konten an.
+     */
     public function invite(array $params): string
     {
         $this->requireSchool($params['school']);
@@ -553,145 +569,57 @@ final class PortalController extends Controller
         $edition = $this->ctx->requireEdition();
 
         $back = $this->ctx->schoolUrl('/admin/aussteller-konten');
-        $username = trim((string) ($_POST['username'] ?? ''));
-        $email = $this->text('email', 255);
-        $firstname = $this->text('firstname', 100) ?? '';
-        $lastname = $this->text('lastname', 100) ?? '';
-        $exhibitorId = (int) ($_POST['exhibitor_id'] ?? 0);
-
-        if (!preg_match('/^[a-zA-Z0-9._@+-]{3,100}$/', $username)) {
-            $this->flash('error', 'Der Benutzername darf 3–100 Zeichen lang sein (Buchstaben, Zahlen, . _ @ + -).');
-            $this->redirect($back);
-        }
-        if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            $this->flash('error', 'Bitte gib eine gültige E-Mail-Adresse an.');
-            $this->redirect($back);
-        }
-
         $exhibitor = $this->ctx->db->fetchOne(
             'SELECT * FROM exhibitors WHERE id = ? AND edition_id = ?',
-            [$exhibitorId, (int) $edition['id']],
+            [(int) ($_POST['exhibitor_id'] ?? 0), (int) $edition['id']],
         );
         if ($exhibitor === null) {
             $this->flash('error', 'Bitte wähle ein Unternehmen dieser Messe aus.');
             $this->redirect($back);
         }
 
-        $user = $this->ctx->db->fetchOne(
-            'SELECT * FROM users WHERE username = ? AND school_id IS NULL',
-            [$username],
-        );
-        if ($user !== null && $user['role'] !== 'exhibitor') {
-            $this->flash('error', 'Dieser Benutzername gehört bereits zu einem anderen Konto.');
-            $this->redirect($back);
-        }
-
-        // Bestehendes Konto mit Passwort: direkt verknüpfen, keine neue Einladung nötig.
-        if ($user !== null && $user['password'] !== null) {
-            $this->linkExistingAccount($user, $exhibitor);
-            $this->redirect($back);
-        }
-
-        $token = bin2hex(random_bytes(32));
-        $expires = (new \DateTimeImmutable('now'))
-            ->modify('+' . self::INVITE_VALID_DAYS . ' days')
-            ->format('Y-m-d H:i:s');
-
-        $this->ctx->db->transaction(function () use ($user, $username, $email, $firstname, $lastname, $exhibitor, $token, $expires): void {
-            $userId = $user !== null ? (int) $user['id'] : null;
-            if ($userId === null) {
-                $this->ctx->db->run(
-                    'INSERT INTO users (school_id, username, email, password, firstname, lastname, role)
-                     VALUES (NULL, ?, ?, NULL, ?, ?, \'exhibitor\')',
-                    [$username, $email, $firstname, $lastname],
-                );
-                $userId = $this->ctx->db->lastInsertId();
-            } elseif ($email !== null && ($user['email'] ?? null) === null) {
-                $this->ctx->db->run('UPDATE users SET email = ? WHERE id = ?', [$email, $userId]);
-            }
-
-            $existing = $this->ctx->db->fetchOne(
-                'SELECT * FROM exhibitor_users WHERE user_id = ? AND exhibitor_id = ?',
-                [$userId, (int) $exhibitor['id']],
-            );
-
-            if ($existing === null) {
-                $this->ctx->db->run(
-                    'INSERT INTO exhibitor_users
-                        (user_id, exhibitor_id, invite_token, invite_expires, invite_accepted, status)
-                     VALUES (?, ?, ?, ?, 0, \'active\')',
-                    [$userId, (int) $exhibitor['id'], $token, $expires],
-                );
-            } else {
-                $this->ctx->db->run(
-                    'UPDATE exhibitor_users
-                     SET invite_token = ?, invite_expires = ?, invite_accepted = 0,
-                         status = \'active\', cancelled_at = NULL, cancel_reason = NULL
-                     WHERE id = ?',
-                    [$token, $expires, (int) $existing['id']],
-                );
-            }
-        });
+        $note = $this->text('note', 200);
+        (new ExhibitorInvitations($this->ctx->db))->create((int) $exhibitor['id'], $note, $this->ctx->auth->id());
 
         $this->ctx->audit->log(
-            'Aussteller-Konto eingeladen',
+            'Aussteller eingeladen',
             'info',
-            'Benutzer: ' . $username . ' — Unternehmen: ' . (string) $exhibitor['name'],
+            'Unternehmen: ' . (string) $exhibitor['name'] . ($note !== null ? ', Notiz: ' . $note : ''),
             $this->ctx->schoolId(),
         );
-        $this->flash('success', 'Einladung erstellt. Der Link steht in der Liste zum Kopieren bereit.');
+        $this->flash('success', 'Einladungslink erstellt. Er steht beim Unternehmen zum Kopieren bereit und gilt '
+            . ExhibitorInvitations::VALID_DAYS . ' Tage.');
         $this->redirect($back);
     }
 
-    /**
-     * Verknüpft ein bereits aktives Aussteller-Konto (Passwort vorhanden)
-     * ohne neuen Einladungs-Token mit einem Unternehmen und informiert es in-App.
-     */
-    private function linkExistingAccount(array $user, array $exhibitor): void
+    /** POST /{school}/admin/aussteller-konten/einladung/{id}/zurueckziehen */
+    public function revokeInvite(array $params): string
     {
-        $userId = (int) $user['id'];
-        $existing = $this->ctx->db->fetchOne(
-            'SELECT * FROM exhibitor_users WHERE user_id = ? AND exhibitor_id = ?',
-            [$userId, (int) $exhibitor['id']],
-        );
+        $this->requireSchool($params['school']);
+        $this->requirePermission(Permissions::AUSSTELLER_KONTEN_VERWALTEN);
+        $this->requireCsrf();
+        $edition = $this->ctx->requireEdition();
 
-        if ($existing === null) {
-            $this->ctx->db->run(
-                'INSERT INTO exhibitor_users (user_id, exhibitor_id, invite_accepted, status)
-                 VALUES (?, ?, 1, \'active\')',
-                [$userId, (int) $exhibitor['id']],
-            );
-        } else {
-            $this->ctx->db->run(
-                'UPDATE exhibitor_users
-                 SET invite_accepted = 1, invite_token = NULL, invite_expires = NULL,
-                     status = \'active\', cancelled_at = NULL, cancel_reason = NULL
-                 WHERE id = ?',
-                [(int) $existing['id']],
-            );
+        $invite = $this->ctx->db->fetchOne(
+            'SELECT i.id, e.name AS exhibitor_name
+             FROM exhibitor_invitations i
+             JOIN exhibitors e ON e.id = i.exhibitor_id
+             WHERE i.id = ? AND e.edition_id = ?',
+            [(int) $params['id'], (int) $edition['id']],
+        );
+        if ($invite === null) {
+            throw new HttpException(404, 'Diese Einladung existiert nicht.');
         }
 
-        $notifications = new \App\Services\Notifications($this->ctx->db);
-        $notifications->send(
-            $userId,
-            $this->ctx->schoolId(),
-            sprintf(
-                'Dein Konto wurde dem Unternehmen „%s" (%s) hinzugefügt.',
-                (string) $exhibitor['name'],
-                (string) ($this->ctx->school['name'] ?? ''),
-            ),
-            'info',
-            (int) $exhibitor['id'],
-            $this->ctx->schoolUrl('/portal'),
-        );
-
+        (new ExhibitorInvitations($this->ctx->db))->revoke((int) $invite['id']);
         $this->ctx->audit->log(
-            'Bestehendes Aussteller-Konto verknüpft',
+            'Aussteller-Einladung zurückgezogen',
             'info',
-            'Benutzer: ' . (string) $user['username'] . ' — Unternehmen: ' . (string) $exhibitor['name'],
+            'Unternehmen: ' . (string) $invite['exhibitor_name'],
             $this->ctx->schoolId(),
         );
-        $this->flash('success', 'Das bestehende Konto wurde direkt verknüpft — keine Einladung nötig, das Konto wurde benachrichtigt.');
+        $this->flash('success', 'Einladung zurückgezogen. Der Link ist ab sofort ungültig.');
+        $this->redirect($this->ctx->schoolUrl('/admin/aussteller-konten'));
     }
 
     /** POST /{school}/admin/aussteller-konten/{id}/rechte */
@@ -731,7 +659,7 @@ final class PortalController extends Controller
         $link = $this->requireLink((int) $params['id']);
         $this->ctx->db->run(
             'UPDATE exhibitor_users
-             SET status = \'removed_by_admin\', cancelled_at = NOW(), invite_token = NULL, invite_expires = NULL
+             SET status = \'removed_by_admin\', cancelled_at = NOW()
              WHERE id = ?',
             [(int) $link['id']],
         );
@@ -760,7 +688,8 @@ final class PortalController extends Controller
             (int) $this->ctx->auth->id(),
         );
 
-        $this->flash('success', 'Absage bestätigt. ' . $affected . ' Anmeldung(en) wurden aufgelöst.');
+        $this->flash('success', 'Absage bestätigt. ' . $affected
+            . ' Schüler:innen haben jetzt eine ruhende Buchung und warten auf eine Neuzuteilung.');
         $this->redirect($this->ctx->schoolUrl('/admin/aussteller-konten'));
     }
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * Branchen-Stammdaten (global, aber nur im Schul-Kontext bearbeitbar).
+ * Branchen-Stammdaten der Schule (gelten für alle ihre Editionen).
  * Erwartet: $industries, $usage (Name => Anzahl), $unknown (Name => Anzahl).
  */
 
@@ -13,7 +13,7 @@ $canEdit = $auth->can(P::BRANCHEN_BEARBEITEN, $schoolId);
     <div class="page-title-group">
         <div class="page-eyebrow">Verwaltung</div>
         <h1 class="page-title">Branchen</h1>
-        <p class="page-sub">Auswahlliste für Aussteller-Profile. Branchen gelten schulübergreifend.</p>
+        <p class="page-sub">Auswahlliste für Aussteller-Profile. Die Branchen gelten nur für eure Schule, dafür in allen Jahrgängen.</p>
     </div>
 </div>
 

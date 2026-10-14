@@ -1,7 +1,7 @@
 <?php
 /**
  * Verwaltung der Aussteller-Konten & Einladungen einer Schule.
- * Erwartet: $exhibitors, $linksByExhibitor, $requests, $inviteBaseUrl.
+ * Erwartet: $exhibitors, $linksByExhibitor, $invitesByExhibitor, $requests, $inviteBaseUrl.
  */
 $statusLabels = [
     'active' => 'Aktiv',
@@ -9,19 +9,18 @@ $statusLabels = [
     'cancelled_by_school' => 'Von der Schule beendet',
     'removed_by_admin' => 'Entfernt',
 ];
-$now = new DateTimeImmutable('now');
 ?>
 <div class="page-header">
     <div class="page-title-group">
         <div class="page-eyebrow">Verwaltung</div>
         <h1 class="page-title">Aussteller-Konten</h1>
         <p class="page-sub">
-            Einladungen erstellen, Rechte vergeben und Absagen bearbeiten.
-            Es werden keine E-Mails versendet — den Einladungslink verteilst du selbst.
+            Unternehmen einladen, Rechte vergeben und Absagen bearbeiten.
+            Es werden keine E-Mails versendet: Den Einladungslink gibst du selbst an das Unternehmen weiter.
         </p>
     </div>
     <div class="page-actions">
-        <button class="btn btn-primary" type="button" data-open-modal="einladen">➕ Konto einladen</button>
+        <button class="btn btn-primary" type="button" data-open-modal="einladen">➕ Unternehmen einladen</button>
     </div>
 </div>
 
@@ -61,7 +60,7 @@ $now = new DateTimeImmutable('now');
                                 <div class="row-actions">
                                     <form method="post"
                                           action="<?= e($ctx->schoolUrl('/admin/aussteller-konten/absage/' . (int) $request['id'] . '/bestaetigen')) ?>"
-                                          data-confirm="Absage bestätigen? Der Aussteller wird deaktiviert und alle Anmeldungen werden aufgelöst.">
+                                          data-confirm="Absage bestätigen? Der Aussteller wird ausgeblendet, die Buchungen der Schüler:innen ruhen, bis ihr neu zuteilt.">
                                         <?= $csrf->field() ?>
                                         <button class="btn btn-sm btn-danger" type="submit">Bestätigen</button>
                                     </form>
@@ -92,7 +91,11 @@ $now = new DateTimeImmutable('now');
 
 <?php elseif ($blockKey === 'konten'): ?>
     <?php foreach ($exhibitors as $exhibitor): ?>
-        <?php $links = $linksByExhibitor[(int) $exhibitor['id']] ?? []; ?>
+        <?php
+        $exhibitorId = (int) $exhibitor['id'];
+        $links = $linksByExhibitor[$exhibitorId] ?? [];
+        $invites = $invitesByExhibitor[$exhibitorId] ?? [];
+        ?>
         <div class="card">
             <div class="card-header">
                 <h3 style="margin:0;"><?= e($exhibitor['name']) ?></h3>
@@ -100,10 +103,13 @@ $now = new DateTimeImmutable('now');
                     <span class="badge badge-danger">inaktiv</span>
                 <?php endif; ?>
                 <span class="badge badge-info"><?= e((string) count($links)) ?> Konto/Konten</span>
+                <?php if ($invites !== []): ?>
+                    <span class="badge badge-warning"><?= e((string) count($invites)) ?> Einladung(en) offen</span>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <?php if ($links === []): ?>
-                    <p class="text-sm text-soft">Noch kein Konto verknüpft.</p>
+                    <p class="text-sm text-soft">Noch kein Konto verknüpft. Konten erscheinen hier, sobald jemand eine Einladung angenommen hat.</p>
                 <?php else: ?>
                     <div class="table-wrap">
                         <table class="data-table">
@@ -112,7 +118,6 @@ $now = new DateTimeImmutable('now');
                                 <th>Konto</th>
                                 <th>Status</th>
                                 <th>Rechte</th>
-                                <th>Einladungslink</th>
                                 <th></th>
                             </tr>
                             </thead>
@@ -121,15 +126,6 @@ $now = new DateTimeImmutable('now');
                                 <?php
                                 $linkId = (int) $link['id'];
                                 $isActive = $link['status'] === 'active';
-                                $accepted = (int) $link['invite_accepted'] === 1;
-                                $expired = false;
-                                if (!empty($link['invite_expires'])) {
-                                    try {
-                                        $expired = new DateTimeImmutable((string) $link['invite_expires']) < $now;
-                                    } catch (Exception) {
-                                        $expired = false;
-                                    }
-                                }
                                 ?>
                                 <tr>
                                     <td>
@@ -147,13 +143,6 @@ $now = new DateTimeImmutable('now');
                                             <span class="badge badge-danger"><?= e($statusLabels[$link['status']] ?? $link['status']) ?></span>
                                             <?php if (!empty($link['cancel_reason'])): ?>
                                                 <div class="text-sm text-soft"><?= e($link['cancel_reason']) ?></div>
-                                            <?php endif; ?>
-                                        <?php elseif (!$accepted): ?>
-                                            <span class="badge badge-warning">Einladung ausstehend</span>
-                                            <?php if ($expired): ?>
-                                                <div class="text-sm text-danger">Link abgelaufen</div>
-                                            <?php elseif (!empty($link['invite_expires'])): ?>
-                                                <div class="text-sm text-faint">gültig bis <?= e(format_datetime($link['invite_expires'])) ?></div>
                                             <?php endif; ?>
                                         <?php else: ?>
                                             <span class="badge badge-success">Aktiv</span>
@@ -177,19 +166,7 @@ $now = new DateTimeImmutable('now');
                                                 <button class="btn btn-sm btn-ghost" type="submit">Rechte speichern</button>
                                             </form>
                                         <?php else: ?>
-                                            <span class="text-sm text-faint">—</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?php if ($isActive && !$accepted && !empty($link['invite_token'])): ?>
-                                            <?php $inviteUrl = $inviteBaseUrl . $link['invite_token']; ?>
-                                            <input class="input mono text-sm" type="text" readonly
-                                                   value="<?= e($inviteUrl) ?>"
-                                                   aria-label="Einladungslink für <?= e($link['username']) ?>">
-                                            <button class="btn btn-sm btn-ghost" type="button"
-                                                    data-copy="<?= e($inviteUrl) ?>">📋 Link kopieren</button>
-                                        <?php else: ?>
-                                            <span class="text-sm text-faint">—</span>
+                                            <span class="text-sm text-faint">keine</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -210,6 +187,56 @@ $now = new DateTimeImmutable('now');
                         </table>
                     </div>
                 <?php endif; ?>
+
+                <?php if ($invites !== []): ?>
+                    <h4 style="margin:16px 0 8px;">Offene Einladungen</h4>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                            <tr>
+                                <th>Notiz</th>
+                                <th>Erstellt</th>
+                                <th>Einladungslink</th>
+                                <th></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($invites as $invite): ?>
+                                <?php $inviteUrl = $inviteBaseUrl . (string) $invite['token']; ?>
+                                <tr>
+                                    <td class="text-sm"><?= e((string) ($invite['note'] ?? '')) ?></td>
+                                    <td class="text-sm nowrap">
+                                        <?= e(format_datetime($invite['created_at'])) ?>
+                                        <?php if (!empty($invite['created_by_name'])): ?>
+                                            <div class="text-faint">von <?= e($invite['created_by_name']) ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ((int) $invite['expired'] === 1): ?>
+                                            <span class="text-sm text-danger">Link abgelaufen</span>
+                                        <?php else: ?>
+                                            <input class="input mono text-sm" type="text" readonly
+                                                   value="<?= e($inviteUrl) ?>"
+                                                   aria-label="Einladungslink für <?= e($exhibitor['name']) ?>">
+                                            <button class="btn btn-sm btn-ghost" type="button"
+                                                    data-copy="<?= e($inviteUrl) ?>">📋 Link kopieren</button>
+                                            <div class="text-sm text-faint">gültig bis <?= e(format_datetime($invite['expires_at'])) ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <form method="post"
+                                              action="<?= e($ctx->schoolUrl('/admin/aussteller-konten/einladung/' . (int) $invite['id'] . '/zurueckziehen')) ?>"
+                                              data-confirm="Einladung zurückziehen? Der Link wird sofort ungültig.">
+                                            <?= $csrf->field() ?>
+                                            <button class="btn btn-sm btn-danger-ghost" type="submit">Zurückziehen</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     <?php endforeach; ?>
@@ -221,54 +248,34 @@ $now = new DateTimeImmutable('now');
     <form method="post" action="<?= e($ctx->schoolUrl('/admin/aussteller-konten/einladen')) ?>">
         <?= $csrf->field() ?>
         <div class="modal-header">
-            <h3>Aussteller-Konto einladen</h3>
+            <h3>Unternehmen einladen</h3>
             <button class="modal-close" type="button" data-close-modal aria-label="Schließen">×</button>
         </div>
         <div class="modal-body">
             <div class="field">
                 <label for="invite-exhibitor">Unternehmen</label>
                 <select class="input" id="invite-exhibitor" name="exhibitor_id" required>
-                    <option value="">— bitte wählen —</option>
+                    <option value="">bitte wählen</option>
                     <?php foreach ($exhibitors as $exhibitor): ?>
                         <option value="<?= e((string) $exhibitor['id']) ?>"><?= e($exhibitor['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="field">
-                <label for="invite-username">Benutzername oder E-Mail</label>
-                <input class="input" type="text" id="invite-username" name="username" required
-                       pattern="[a-zA-Z0-9._@+\-]{3,100}" list="exhibitor-accounts">
-                <datalist id="exhibitor-accounts">
-                    <?php foreach ($existingAccounts ?? [] as $acc): ?>
-                        <option value="<?= e($acc['username']) ?>"><?= e(trim(($acc['firstname'] ?? '') . ' ' . ($acc['lastname'] ?? ''))) ?></option>
-                    <?php endforeach; ?>
-                </datalist>
-                <div class="hint">
-                    Existiert bereits ein Aussteller-Konto mit diesem Namen (Vorschläge beim Tippen), wird es
-                    <strong>direkt verknüpft</strong> — ohne neue Einladung. Neue Namen erhalten einen Einladungslink.
-                </div>
-            </div>
-            <div class="form-grid">
-                <div class="field">
-                    <label for="invite-firstname">Vorname</label>
-                    <input class="input" type="text" id="invite-firstname" name="firstname" maxlength="100">
-                </div>
-                <div class="field">
-                    <label for="invite-lastname">Nachname</label>
-                    <input class="input" type="text" id="invite-lastname" name="lastname" maxlength="100">
-                </div>
-            </div>
-            <div class="field">
-                <label for="invite-email">E-Mail (optional)</label>
-                <input class="input" type="email" id="invite-email" name="email" maxlength="255">
+                <label for="invite-note">Notiz (optional)</label>
+                <input class="input" type="text" id="invite-note" name="note" maxlength="200"
+                       placeholder="z. B. an wen der Link geht">
+                <div class="hint">Nur für euch sichtbar, damit ihr offene Links zuordnen könnt.</div>
             </div>
             <div class="alert alert-info" role="status">
-                Nach dem Anlegen erscheint der Einladungslink in der Liste. Er ist 14 Tage gültig.
+                Es entsteht ein Einladungslink, kein Konto. Wer ihn öffnet, meldet sich mit einem
+                bestehenden Aussteller-Konto an oder legt ein neues an. Der Link gilt 14 Tage und
+                lässt sich nur einmal einlösen.
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn btn-ghost" type="button" data-close-modal>Abbrechen</button>
-            <button class="btn btn-primary" type="submit">Einladung erstellen</button>
+            <button class="btn btn-primary" type="submit">Link erstellen</button>
         </div>
     </form>
 </dialog>

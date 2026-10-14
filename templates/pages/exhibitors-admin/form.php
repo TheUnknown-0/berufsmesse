@@ -2,7 +2,8 @@
 /**
  * Aussteller anlegen/bearbeiten (Admin) inkl. Logo und Dokumenten.
  * Erwartet: $exhibitor (null beim Anlegen), $values, $industries,
- * $offerTypes, $visibleFieldLabels, $documents.
+ * $offerTypes, $visibleFieldLabels, $documents, $stages.
+ * Beim Bearbeiten zusätzlich: $liveCount (Buchungen), $heldCount (ruhende Buchungen).
  * Beim Bearbeiten zusätzlich: $notes (Akquise-Verlauf), $history (frühere Jahrgänge).
  */
 
@@ -34,6 +35,7 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
 
 <?php foreach (page_blocks('admin-aussteller-formular', [
     'formular' => 'Aussteller-Formular',
+    'teilnahme' => 'Teilnahme & Absage',
     'akquise' => 'Akquise & Historie',
     'logo-entfernen' => 'Logo entfernen',
     'dokumente' => 'Dokumente',
@@ -94,14 +96,36 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
                            value="<?= e((string) $values['total_slots']) ?>" <?= $readonly ? 'disabled' : '' ?>>
                     <div class="hint">Gilt nur für Aussteller ohne Raum.</div>
                 </div>
-                <div class="field">
-                    <label for="active">Sichtbarkeit</label>
-                    <label class="checkbox-row" for="active">
-                        <input type="checkbox" id="active" name="active" value="1"
-                               <?= (int) $values['active'] === 1 ? 'checked' : '' ?> <?= $readonly ? 'disabled' : '' ?>>
-                        <span>Aussteller ist aktiv und für Schüler:innen sichtbar</span>
-                    </label>
-                </div>
+                <?php if ($isNew): ?>
+                    <div class="field">
+                        <label for="pipeline_status">Status</label>
+                        <select class="input" id="pipeline_status" name="pipeline_status">
+                            <?php foreach ($stages as $stageKey => $stageLabel): ?>
+                                <option value="<?= e($stageKey) ?>"<?= $values['pipeline_status'] === $stageKey ? ' selected' : '' ?>>
+                                    <?= e($stageLabel) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <div class="hint">Nur „Zugesagt“ ist für Schüler:innen sichtbar. Später änderst du den Status in der Pipeline.</div>
+                    </div>
+                <?php else: ?>
+                    <div class="field">
+                        <label>Status</label>
+                        <div>
+                            <span class="badge <?= (int) $exhibitor['active'] === 1 ? 'badge-success' : '' ?>">
+                                <?= e($stages[(string) $exhibitor['pipeline_status']] ?? (string) $exhibitor['pipeline_status']) ?>
+                            </span>
+                            <span class="text-sm text-soft">
+                                <?= (int) $exhibitor['active'] === 1 ? 'sichtbar für Schüler:innen' : 'ausgeblendet' ?>
+                            </span>
+                        </div>
+                        <div class="hint">
+                            Sichtbarkeit und Status änderst du in der
+                            <a href="<?= e($ctx->schoolUrl('/admin/aussteller/pipeline')) ?>">Pipeline</a>
+                            oder unten unter „Teilnahme“.
+                        </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -164,7 +188,7 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
                 <?php endforeach; ?>
                 <div class="field mt-2">
                     <label for="offer_types_custom">Weiteres Angebot</label>
-                    <input class="input" type="text" id="offer_types_custom" name="offer_types_custom" maxlength="200"
+                    <input class="input" type="text" id="offer_types_custom" name="offer_types_custom" maxlength="500"
                            placeholder="z. B. Trainee-Programm"
                            value="<?= e($values['offer_types_custom']) ?>" <?= $readonly ? 'disabled' : '' ?>>
                 </div>
@@ -212,6 +236,61 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
         </div>
     <?php endif; ?>
 </form>
+
+<?php elseif ($blockKey === 'teilnahme'): ?>
+<?php if (!$isNew): ?>
+    <?php
+    $isActive = (int) $exhibitor['active'] === 1;
+    $exhibitorUrl = $ctx->schoolUrl('/admin/aussteller/' . (int) $exhibitor['id']);
+    ?>
+    <div class="card mb-2">
+        <div class="card-header"><h2>Teilnahme &amp; Absage</h2></div>
+        <div class="card-body">
+            <?php if ($isActive): ?>
+                <p class="text-sm text-soft">
+                    Aktuell <?= e((string) $liveCount) ?> Buchung(en). Bei einer Absage werden sie zu
+                    <strong>ruhenden Buchungen</strong>: Die Schüler:innen gelten als ungebucht, die alte Buchung
+                    bleibt aber erhalten, bis ihr im selben Slot neu zuteilt. Schüler:innen und das Unternehmen
+                    werden in der App benachrichtigt.
+                </p>
+                <?php if ($can(P::AUSSTELLER_BEARBEITEN)): ?>
+                    <form method="post" action="<?= e($exhibitorUrl . '/absagen') ?>"
+                          data-confirm="„<?= e($exhibitor['name']) ?>“ wirklich absagen? <?= e((string) $liveCount) ?> Buchung(en) werden ruhend.">
+                        <?= $csrf->field() ?>
+                        <div class="field">
+                            <label for="absage-grund">Begründung</label>
+                            <input class="input" type="text" id="absage-grund" name="reason" maxlength="500" required
+                                   placeholder="z. B. Unternehmen hat telefonisch abgesagt">
+                        </div>
+                        <button class="btn btn-danger" type="submit">Absage durch Schule</button>
+                    </form>
+                <?php endif; ?>
+            <?php else: ?>
+                <p>
+                    <span class="badge badge-danger">ausgeblendet</span>
+                    <?php if ($heldCount > 0): ?>
+                        <strong><?= e((string) $heldCount) ?></strong> ruhende Buchung(en) warten auf eine Neuzuteilung.
+                    <?php else: ?>
+                        Es gibt keine ruhenden Buchungen.
+                    <?php endif; ?>
+                </p>
+                <div class="cluster">
+                    <?php if ($heldCount > 0 && $can(P::ANMELDUNGEN_SEHEN)): ?>
+                        <a class="btn btn-primary"
+                           href="<?= e($ctx->schoolUrl('/admin/ausfall/' . (int) $exhibitor['id'])) ?>">Betroffene neu zuteilen</a>
+                    <?php endif; ?>
+                    <?php if ($can(P::AUSSTELLER_BEARBEITEN)): ?>
+                        <form method="post" action="<?= e($exhibitorUrl . '/absage-zuruecknehmen') ?>"
+                              data-confirm="Absage zurücknehmen? Der Aussteller wird wieder sichtbar und „Zugesagt“; ruhende Buchungen werden wieder aktiv.">
+                            <?= $csrf->field() ?>
+                            <button class="btn" type="submit">Absage zurücknehmen</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
 
 <?php elseif ($blockKey === 'akquise'): ?>
     <?php if (!$isNew): ?>
@@ -393,7 +472,11 @@ $readonly = !$isNew && !$can(P::AUSSTELLER_BEARBEITEN);
     <div class="card">
         <div class="card-header"><h2>Aussteller löschen</h2></div>
         <div class="card-body">
-            <p class="text-soft text-sm">Anmeldungen, Dokumente und Ausstattungsanfragen dieses Ausstellers werden mitgelöscht. Das lässt sich nicht rückgängig machen.</p>
+            <p class="text-soft text-sm">
+                Dokumente und Ausstattungsanfragen werden mitgelöscht. Das lässt sich nicht rückgängig machen.
+                Solange Schüler:innen hier gebucht sind oder ruhende Buchungen haben, ist Löschen gesperrt:
+                Sagt den Aussteller dann ab und teilt die Betroffenen neu zu.
+            </p>
             <form method="post"
                   action="<?= e($ctx->schoolUrl('/admin/aussteller/' . (int) $exhibitor['id'] . '/loeschen')) ?>"
                   data-confirm="Aussteller wirklich unwiderruflich löschen?">

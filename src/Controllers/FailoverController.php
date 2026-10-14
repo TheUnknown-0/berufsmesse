@@ -6,17 +6,22 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\CancellationService;
 use App\Services\Capacity;
 use App\Services\Notifications;
 use App\Services\Rebooking;
 
 /**
- * Kurzfristiger Ausfall eines Ausstellers am Messetag: betroffene
- * Schüler:innen finden, auf freie Plätze umbuchen und benachrichtigen.
+ * Ausfall und Neuzuteilung: betroffene Schüler:innen eines Ausstellers
+ * finden, auf freie Plätze umbuchen und benachrichtigen.
  *
- * Bewusst zweistufig — erst Vorschau, dann Ausführung: Die Umbuchung
- * verschiebt Anmeldungen quer über den Tag und lässt sich nicht mit einem
- * Klick zurücknehmen.
+ * Bei einem noch aktiven Aussteller wird zuerst über den zentralen
+ * Absage-Ablauf (CancellationService) abgesagt; seine Buchungen werden
+ * dadurch ruhend. Bei einem bereits abgesagten Aussteller werden nur die
+ * noch ruhenden Buchungen neu zugeteilt. Wer keinen Platz bekommt, behält
+ * seine ruhende Buchung.
+ *
+ * Bewusst zweistufig: erst Vorschau, dann Ausführung.
  */
 final class FailoverController extends Controller
 {
@@ -28,35 +33,37 @@ final class FailoverController extends Controller
         $edition = $this->ctx->requireEdition();
 
         $exhibitors = $this->ctx->db->fetchAll(
-            'SELECT e.id, e.name, e.active,
+            'SELECT e.id, e.name, e.active, e.pipeline_status,
                     (SELECT COUNT(*) FROM registrations r
-                      WHERE r.exhibitor_id = e.id AND r.timeslot_id IS NOT NULL) AS betroffen
+                      WHERE r.exhibitor_id = e.id AND r.timeslot_id IS NOT NULL) AS betroffen,
+                    (SELECT COUNT(*) FROM registrations_on_hold h
+                      WHERE h.exhibitor_id = e.id AND h.timeslot_id IS NOT NULL) AS ruhend
              FROM exhibitors e
              WHERE e.edition_id = ?
-             ORDER BY e.active DESC, e.name',
+             ORDER BY e.active DESC, ruhend DESC, e.name',
             [(int) $edition['id']],
         );
 
         return $this->render('pages/attendance/ausfall', [
-            'title' => 'Ausfall melden',
+            'title' => 'Ausfall & Neuzuteilung',
             'exhibitors' => $exhibitors,
             'plan' => null,
             'exhibitor' => null,
         ]);
     }
 
-    /** GET /{school}/admin/ausfall/{id} — Vorschau der Umbuchung. */
+    /** GET /{school}/admin/ausfall/{id}: Vorschau der Umbuchung. */
     public function preview(array $params): string
     {
         $this->requireSchool($params['school']);
         $this->requirePermission(Permissions::ANMELDUNGEN_SEHEN);
         $edition = $this->ctx->requireEdition();
-        $exhibitor = $this->loadExhibitor((int) $params['id']);
 
+        $exhibitor = $this->loadExhibitor((int) $params['id']);
         $plan = $this->rebooking()->preview((int) $edition['id'], (int) $exhibitor['id']);
 
         return $this->render('pages/attendance/ausfall', [
-            'title' => 'Ausfall: ' . (string) $exhibitor['name'],
+            'title' => ((int) $exhibitor['active'] === 1 ? 'Ausfall: ' : 'Neu zuteilen: ') . (string) $exhibitor['name'],
             'exhibitors' => [],
             'plan' => $plan,
             'exhibitor' => $exhibitor,
@@ -74,37 +81,58 @@ final class FailoverController extends Controller
         $this->requirePermission(Permissions::ANMELDUNGEN_LOESCHEN);
         $this->requireCsrf();
         $edition = $this->ctx->requireEdition();
+        $schoolId = (int) $this->ctx->schoolId();
+
         $exhibitor = $this->loadExhibitor((int) $params['id']);
+        $wasActive = (int) $exhibitor['active'] === 1;
+
+        // Noch aktiv: erst absagen (Buchungen werden ruhend), dann neu zuteilen.
+        // Die Schüler:innen informiert hier die Umbuchung selbst, nicht die Absage.
+        if ($wasActive) {
+            (new CancellationService($this->ctx))->execute(
+                $exhibitor,
+                $edition,
+                $schoolId,
+                'Ausfall am Messetag',
+                'failover',
+                $this->ctx->auth->id(),
+                'cancelled',
+                false,
+            );
+        }
 
         $result = $this->rebooking()->execute(
             (int) $edition['id'],
             (int) $exhibitor['id'],
-            (int) $this->ctx->schoolId(),
+            $schoolId,
             (string) $exhibitor['name'],
+            $wasActive,
         );
 
         $this->ctx->audit->log(
-            'Ausfall verarbeitet',
+            $wasActive ? 'Ausfall verarbeitet' : 'Ruhende Buchungen neu zugeteilt',
             'warning',
             sprintf(
-                'Aussteller #%d „%s“ ausgefallen: %d Anmeldungen umgebucht, %d ohne Ersatz entfernt',
+                'Aussteller #%d „%s“: %d umgebucht, %d ohne Ersatz (Buchung bleibt ruhend)',
                 (int) $exhibitor['id'],
                 (string) $exhibitor['name'],
                 $result['moved'],
                 $result['unplaced'],
             ),
-            $this->ctx->schoolId(),
+            $schoolId,
         );
-
         $this->flash('success', sprintf(
-            '%d Anmeldungen umgebucht, %d ohne Ersatz entfernt. Alle Betroffenen wurden in der App benachrichtigt.',
+            '%d Schüler:innen umgebucht und in der App benachrichtigt.',
             $result['moved'],
-            $result['unplaced'],
         ));
         if ($result['unplaced'] > 0) {
-            $this->flash('warning', 'Für ' . $result['unplaced'] . ' Anmeldung(en) war nirgends Platz — diese Schüler:innen brauchen eine Ansage vor Ort.');
+            $this->flash('warning', sprintf(
+                'Für %d Buchung(en) war nirgends Platz. Sie bleiben ruhend und lassen sich später neu zuteilen, '
+                . 'zum Beispiel über diese Seite oder die manuelle Zuteilung.',
+                $result['unplaced'],
+            ));
         }
-        $this->redirect($this->ctx->schoolUrl('/admin/leitstand'));
+        $this->redirect($this->ctx->schoolUrl($wasActive ? '/admin/leitstand' : '/admin/ausfall'));
     }
 
     // ---------- Helfer ----------

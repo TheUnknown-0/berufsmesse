@@ -77,5 +77,6 @@ final class AbsagePipelineTest extends DatabaseTestCase
         self::assertSame(0, (int) $row['active']);
         self::assertSame('cancelled', $row['pipeline_status']);
         self::assertSame(0, (int) $this->db->fetchValue('SELECT COUNT(*) FROM registrations WHERE exhibitor_id = 1'));
+        self::assertSame(1, (int) $this->db->fetchValue('SELECT COUNT(*) FROM registrations_on_hold WHERE exhibitor_id = 1'));
     }
 }

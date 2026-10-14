@@ -107,9 +107,7 @@ final class GlobalAdminController extends Controller
         $args = [];
 
         if ($filter === 'aktiv') {
-            $sql .= ' AND eu.status = \'active\' AND eu.invite_accepted = 1';
-        } elseif ($filter === 'einladung') {
-            $sql .= ' AND eu.invite_accepted = 0 AND eu.status = \'active\'';
+            $sql .= ' AND eu.status = \'active\'';
         } elseif ($filter === 'abgesagt') {
             $sql .= ' AND eu.status <> \'active\'';
         }
@@ -131,7 +129,6 @@ final class GlobalAdminController extends Controller
             'links' => $this->ctx->db->fetchAll($sql, $args),
             'filter' => $filter,
             'search' => $search,
-            'inviteBaseUrl' => $this->ctx->publicUrl('/aussteller-einladung?token='),
             'oneTimePassword' => is_array($oneTimePassword) ? $oneTimePassword : null,
         ]);
     }
@@ -233,7 +230,7 @@ final class GlobalAdminController extends Controller
         if (($_POST['mode'] ?? '') === 'entfernen') {
             $this->ctx->db->run('UPDATE users SET password = NULL WHERE id = ?', [(int) $account['id']]);
             $this->ctx->audit->log('Aussteller-Konto: Passwort entfernt', 'warning', 'Benutzer: ' . (string) $account['username']);
-            $this->flash('success', 'Passwort entfernt — das Konto kann sich erst nach einer neuen Einladung wieder anmelden.');
+            $this->flash('success', 'Passwort entfernt. Das Konto ist gesperrt, bis du hier ein neues Passwort setzt.');
             $this->redirect($back);
         }
 
@@ -269,31 +266,6 @@ final class GlobalAdminController extends Controller
         $this->redirect($this->ctx->url('/global-admin/aussteller-konten'));
     }
 
-    /** POST /global-admin/aussteller-konten/verknuepfung/{id}/erneuern — neuen Einladungslink erzeugen. */
-    public function renewInvite(array $params): string
-    {
-        $this->requireAdmin();
-        $this->requireCsrf();
-        $link = $this->requireLinkRow((int) $params['id']);
-
-        $token = bin2hex(random_bytes(32));
-        $expires = (new \DateTimeImmutable('now'))->modify('+14 days')->format('Y-m-d H:i:s');
-        $this->ctx->db->run(
-            'UPDATE exhibitor_users
-             SET invite_token = ?, invite_expires = ?, invite_accepted = 0,
-                 status = \'active\', cancelled_at = NULL, cancel_reason = NULL
-             WHERE id = ?',
-            [$token, $expires, (int) $link['id']],
-        );
-        $this->ctx->audit->log(
-            'Aussteller-Einladung erneuert',
-            'info',
-            'Benutzer: ' . (string) $link['username'] . ' — Unternehmen: ' . (string) $link['exhibitor_name'],
-        );
-        $this->flash('success', 'Neuer Einladungslink erzeugt — er steht in der Liste zum Kopieren bereit.');
-        $this->redirect($this->ctx->url('/global-admin/aussteller-konten'));
-    }
-
     /** POST /global-admin/aussteller-konten/verknuepfung/{id}/entfernen */
     public function removeLink(array $params): string
     {
@@ -303,7 +275,7 @@ final class GlobalAdminController extends Controller
 
         $this->ctx->db->run(
             'UPDATE exhibitor_users
-             SET status = \'removed_by_admin\', cancelled_at = NOW(), invite_token = NULL, invite_expires = NULL
+             SET status = \'removed_by_admin\', cancelled_at = NOW()
              WHERE id = ?',
             [(int) $link['id']],
         );

@@ -70,6 +70,9 @@ if ($fullName === '') {
                             <div class="text-sm text-soft">
                                 <?= e($slot['slot_name'] ?? ('Slot ' . (int) $slot['slot_number'])) ?>
                             </div>
+                        <?php elseif (!empty($slot['held'])): ?>
+                            <s class="text-soft"><?= e($slot['held']['exhibitor_name']) ?></s>
+                            <div class="text-sm text-soft">abgesagt, neuer Termin folgt</div>
                         <?php else: ?>
                             <span class="text-soft">Noch keine Zuteilung</span>
                         <?php endif; ?>

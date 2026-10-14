@@ -28,6 +28,8 @@ return static function (Router $r): void {
     $r->get('/{school}/admin/aussteller/pipeline', [ExhibitorPipelineController::class, 'index']);
     $r->post('/{school}/admin/aussteller/{id}/pipeline', [ExhibitorPipelineController::class, 'updateStage']);
     $r->post('/{school}/admin/aussteller/{id}/notiz', [ExhibitorPipelineController::class, 'addNote']);
+    $r->post('/{school}/admin/aussteller/{id}/absagen', [ExhibitorPipelineController::class, 'cancelBySchool']);
+    $r->post('/{school}/admin/aussteller/{id}/absage-zuruecknehmen', [ExhibitorPipelineController::class, 'restore']);
     $r->post('/{school}/admin/notiz/{id}/loeschen', [ExhibitorPipelineController::class, 'deleteNote']);
     $r->get('/{school}/admin/aussteller/{id}', [ExhibitorsAdminController::class, 'edit']);
     $r->post('/{school}/admin/aussteller/{id}', [ExhibitorsAdminController::class, 'update']);

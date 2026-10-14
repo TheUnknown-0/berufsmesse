@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Core\HttpException;
 use App\Core\Permissions;
+use App\Services\CancellationService;
 use App\Services\ExhibitorHistory;
 
 /**
@@ -16,6 +17,10 @@ use App\Services\ExhibitorHistory;
  * direkt; beide werden aber gekoppelt gepflegt: „zugesagt“ schaltet den
  * Aussteller sichtbar, „abgesagt“ und „storniert“ blenden ihn aus. Damit
  * gibt es genau einen Ort, an dem der Stand gepflegt wird.
+ *
+ * Wird ein sichtbarer Aussteller ausgeblendet, ist das eine Absage und läuft
+ * über den CancellationService (Buchungen ruhen); der Weg zurück auf
+ * „Zugesagt“ nimmt die Absage zurück.
  */
 final class ExhibitorPipelineController extends Controller
 {
@@ -29,7 +34,7 @@ final class ExhibitorPipelineController extends Controller
     ];
 
     /** Sichtbarkeit, die zu einer Stufe gehört. */
-    private const VISIBILITY = [
+    public const VISIBILITY = [
         'lead' => 0,
         'contacted' => 0,
         'confirmed' => 1,
@@ -53,7 +58,9 @@ final class ExhibitorPipelineController extends Controller
                     (SELECT n.body FROM exhibitor_notes n WHERE n.exhibitor_id = e.id
                       ORDER BY n.created_at DESC, n.id DESC LIMIT 1) AS last_note,
                     (SELECT n.created_at FROM exhibitor_notes n WHERE n.exhibitor_id = e.id
-                      ORDER BY n.created_at DESC, n.id DESC LIMIT 1) AS last_note_at
+                      ORDER BY n.created_at DESC, n.id DESC LIMIT 1) AS last_note_at,
+                    (SELECT COUNT(*) FROM registrations r WHERE r.exhibitor_id = e.id) AS registration_count,
+                    (SELECT COUNT(*) FROM registrations_on_hold h WHERE h.exhibitor_id = e.id) AS held_count
              FROM exhibitors e
              WHERE e.edition_id = ?
              ORDER BY e.name',
@@ -121,6 +128,52 @@ final class ExhibitorPipelineController extends Controller
         $note = trim((string) ($_POST['note'] ?? ''));
         $previousStage = (string) $exhibitor['pipeline_status'];
 
+        // Wechsel der Sichtbarkeit laufen über den zentralen Absage-Ablauf:
+        // sichtbar → unsichtbar ist eine Absage (Buchungen ruhen),
+        // unsichtbar → „Zugesagt“ nimmt eine Absage zurück.
+        $wasVisible = (int) $exhibitor['active'] === 1;
+        $nowVisible = self::VISIBILITY[$stage] === 1;
+        $schoolId = (int) $this->ctx->schoolId();
+        $edition = $this->ctx->requireEdition();
+        $cancellation = new CancellationService($this->ctx);
+        $extraMessage = '';
+
+        if ($wasVisible && !$nowVisible) {
+            $live = (int) $this->ctx->db->fetchValue(
+                'SELECT COUNT(*) FROM registrations WHERE exhibitor_id = ? AND edition_id = ?',
+                [$exhibitorId, (int) $edition['id']],
+            );
+            if ($live > 0 && ($_POST['absage_bestaetigt'] ?? '') !== '1') {
+                $this->flash('error', sprintf(
+                    '%d Schüler:innen haben bei „%s“ Buchungen. Eine andere Stufe als „Zugesagt“ ist eine Absage; '
+                    . 'bitte bestätige sie im Dialog über das Kontrollkästchen.',
+                    $live,
+                    (string) $exhibitor['name'],
+                ));
+                $this->redirect($back);
+            }
+            $affected = $cancellation->execute(
+                $exhibitor,
+                $edition,
+                $schoolId,
+                $note !== '' ? $note : 'Status in der Pipeline auf „' . self::STAGES[$stage] . '“ gesetzt',
+                'cancelled_by_school',
+                $this->ctx->auth->id(),
+                $stage,
+            );
+            if ($affected > 0) {
+                $extraMessage = ' ' . $affected . ' Schüler:innen haben jetzt eine ruhende Buchung und warten auf eine Neuzuteilung.';
+            }
+        } elseif (!$wasVisible && $nowVisible) {
+            $restored = $cancellation->restore($exhibitor, $edition, $schoolId);
+            if ($restored['restored'] > 0) {
+                $extraMessage = ' ' . $restored['restored'] . ' Schüler:innen sind wieder gebucht.';
+            }
+            if ($restored['blocked'] > 0) {
+                $extraMessage .= ' ' . $restored['blocked'] . ' Buchung(en) bleiben ruhend, weil der Slot inzwischen belegt ist.';
+            }
+        }
+
         $this->ctx->db->transaction(function () use ($exhibitorId, $stage, $followUp, $note, $previousStage): void {
             $this->ctx->db->run(
                 'UPDATE exhibitors SET pipeline_status = ?, follow_up_at = ?, active = ? WHERE id = ?',
@@ -162,6 +215,76 @@ final class ExhibitorPipelineController extends Controller
             $message .= self::VISIBILITY[$stage] === 1
                 ? ' Der Aussteller ist jetzt für Schüler:innen sichtbar.'
                 : ' Der Aussteller ist für Schüler:innen ausgeblendet.';
+        }
+        $this->flash('success', $message . $extraMessage);
+        $this->redirect($back);
+    }
+
+    /** POST /{school}/admin/aussteller/{id}/absagen: Absage durch die Schule. */
+    public function cancelBySchool(array $params): string
+    {
+        $this->requireSchool($params['school']);
+        $this->requirePermission(Permissions::AUSSTELLER_BEARBEITEN);
+        $this->requireCsrf();
+        $exhibitor = $this->loadExhibitor((int) $params['id']);
+        $back = $this->ctx->schoolUrl('/admin/aussteller/' . (int) $exhibitor['id']);
+
+        if ((int) $exhibitor['active'] !== 1) {
+            $this->flash('error', 'Dieser Aussteller ist bereits abgesagt bzw. ausgeblendet.');
+            $this->redirect($back);
+        }
+        $reason = mb_substr(trim((string) ($_POST['reason'] ?? '')), 0, 500);
+        if ($reason === '') {
+            $this->flash('error', 'Bitte gib eine Begründung für die Absage an.');
+            $this->redirect($back);
+        }
+
+        $affected = (new CancellationService($this->ctx))->execute(
+            $exhibitor,
+            $this->ctx->requireEdition(),
+            (int) $this->ctx->schoolId(),
+            $reason,
+            'cancelled_by_school',
+            $this->ctx->auth->id(),
+        );
+        $this->ctx->db->run(
+            'INSERT INTO exhibitor_notes (exhibitor_id, user_id, body, status_from, status_to) VALUES (?, ?, ?, ?, \'cancelled\')',
+            [(int) $exhibitor['id'], $this->ctx->auth->id(), 'Absage durch Schule: ' . $reason, (string) $exhibitor['pipeline_status']],
+        );
+
+        $this->flash('success', $affected > 0
+            ? sprintf('Abgesagt. %d Schüler:innen haben jetzt eine ruhende Buchung und wurden benachrichtigt.', $affected)
+            : 'Abgesagt. Es waren keine Schüler:innen gebucht.');
+        $this->redirect($back);
+    }
+
+    /** POST /{school}/admin/aussteller/{id}/absage-zuruecknehmen */
+    public function restore(array $params): string
+    {
+        $this->requireSchool($params['school']);
+        $this->requirePermission(Permissions::AUSSTELLER_BEARBEITEN);
+        $this->requireCsrf();
+        $exhibitor = $this->loadExhibitor((int) $params['id']);
+        $back = $this->ctx->schoolUrl('/admin/aussteller/' . (int) $exhibitor['id']);
+
+        if ((int) $exhibitor['active'] === 1) {
+            $this->flash('error', 'Dieser Aussteller ist nicht abgesagt.');
+            $this->redirect($back);
+        }
+
+        $result = (new CancellationService($this->ctx))->restore(
+            $exhibitor,
+            $this->ctx->requireEdition(),
+            (int) $this->ctx->schoolId(),
+        );
+        $this->ctx->db->run(
+            'INSERT INTO exhibitor_notes (exhibitor_id, user_id, body, status_from, status_to) VALUES (?, ?, ?, ?, \'confirmed\')',
+            [(int) $exhibitor['id'], $this->ctx->auth->id(), 'Absage zurückgenommen.', (string) $exhibitor['pipeline_status']],
+        );
+
+        $message = sprintf('Absage zurückgenommen. %d Schüler:innen sind wieder gebucht.', $result['restored']);
+        if ($result['blocked'] > 0) {
+            $message .= sprintf(' %d Buchung(en) bleiben ruhend, weil der Slot inzwischen anders belegt ist.', $result['blocked']);
         }
         $this->flash('success', $message);
         $this->redirect($back);

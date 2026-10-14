@@ -7,6 +7,7 @@ namespace App\Controllers;
 use App\Core\HttpException;
 use App\Core\Permissions;
 use App\Services\Capacity;
+use App\Services\HeldRegistrations;
 use App\Services\Notifications;
 use App\Services\Waitlist;
 use DateTimeImmutable;
@@ -112,6 +113,19 @@ final class RegistrationController extends Controller
 
         if (count($selection) > $max) {
             $this->flash('error', 'Du darfst höchstens ' . $max . ' Aussteller wählen.');
+            $this->redirect($back);
+        }
+
+        // Ruhende Buchungen (Aussteller hat abgesagt) zählen mit: Ersatz teilt
+        // ausschließlich die Schule zu, nicht die Schüler:innen selbst.
+        $held = (new HeldRegistrations($this->ctx->db))->countForUser($editionId, $userId);
+        if ($held > 0 && count($selection) + $held > $max) {
+            $this->flash('error', sprintf(
+                'Du hast %d Buchung(en) bei abgesagten Ausstellern. Dafür teilt dir die Schule einen Ersatz zu; '
+                . 'du kannst deshalb höchstens %d Aussteller selbst wählen.',
+                $held,
+                max(0, $max - $held),
+            ));
             $this->redirect($back);
         }
 

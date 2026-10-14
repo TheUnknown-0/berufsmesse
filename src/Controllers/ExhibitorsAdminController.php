@@ -7,27 +7,18 @@ namespace App\Controllers;
 use App\Core\HttpException;
 use App\Core\Permissions;
 use App\Services\ExhibitorHistory;
+use App\Services\ExhibitorProfile;
+use App\Services\HeldRegistrations;
 use App\Services\Uploads;
 
 /**
  * Aussteller-Verwaltung (Admin) inkl. Branchen-Stammdaten.
  *
- * Alle Aussteller-Queries sind an die aktive Edition gebunden; Branchen sind
- * global (Tabelle `industries`), werden aber nur mit Schul-Kontext bearbeitet.
+ * Alle Aussteller-Queries sind an die aktive Edition gebunden; Branchen
+ * (Tabelle `industries`) gehören der Schule und gelten für alle ihre Editionen.
  */
 final class ExhibitorsAdminController extends Controller
 {
-    /** Auswählbare Angebotstypen; zusätzlich ist ein Freitext möglich. */
-    public const OFFER_TYPES = [
-        'Ausbildung',
-        'Duales Studium',
-        'Studium',
-        'Praktikum',
-        'Werkstudent',
-        'Hospitation',
-        'Sonstiges',
-    ];
-
     /** Profilfelder, deren Sichtbarkeit für Schüler einzeln steuerbar ist. */
     public const VISIBLE_FIELDS = [
         'contact_person' => 'Ansprechpartner:in',
@@ -37,9 +28,6 @@ final class ExhibitorsAdminController extends Controller
         'jobs' => 'Berufe & Tätigkeiten',
         'features' => 'Besonderheiten',
     ];
-
-    /** Für Logos zugelassene Dateiendungen (SVG bewusst nicht — Script-Risiko). */
-    private const LOGO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
     // ---------- Liste ----------
 
@@ -117,9 +105,10 @@ final class ExhibitorsAdminController extends Controller
             'exhibitor' => null,
             'values' => $this->formValues(null),
             'industries' => $this->industryNames(),
-            'offerTypes' => self::OFFER_TYPES,
+            'offerTypes' => ExhibitorProfile::OFFER_TYPES,
             'visibleFieldLabels' => self::VISIBLE_FIELDS,
             'documents' => [],
+            'stages' => ExhibitorPipelineController::STAGES,
         ]);
     }
 
@@ -133,14 +122,19 @@ final class ExhibitorsAdminController extends Controller
 
         $back = $this->ctx->schoolUrl('/admin/aussteller/neu');
         $data = $this->readInput($back);
+        // Sichtbarkeit folgt immer dem Pipeline-Status (siehe ExhibitorPipelineController).
+        $stage = (string) ($_POST['pipeline_status'] ?? 'confirmed');
+        if (!isset(ExhibitorPipelineController::STAGES[$stage])) {
+            $stage = 'confirmed';
+        }
         $logo = $this->storeLogo($back);
 
         $this->ctx->db->run(
             'INSERT INTO exhibitors
                 (edition_id, name, short_description, description, categories, logo, contact_person,
                  email, phone, website, jobs, features, offer_types, equipment, visible_fields,
-                 total_slots, active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                 total_slots, active, pipeline_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 (int) $edition['id'],
                 $data['name'],
@@ -158,7 +152,8 @@ final class ExhibitorsAdminController extends Controller
                 $data['equipment'],
                 $data['visible_fields'],
                 $data['total_slots'],
-                $data['active'],
+                ExhibitorPipelineController::VISIBILITY[$stage],
+                $stage,
             ],
         );
         $id = $this->ctx->db->lastInsertId();
@@ -204,11 +199,20 @@ final class ExhibitorsAdminController extends Controller
             'exhibitor' => $exhibitor,
             'values' => $this->formValues($exhibitor),
             'industries' => $this->industryNames(self::decodeList($exhibitor['categories'])),
-            'offerTypes' => self::OFFER_TYPES,
+            'offerTypes' => ExhibitorProfile::OFFER_TYPES,
             'visibleFieldLabels' => self::VISIBLE_FIELDS,
             'documents' => $documents,
             'notes' => $notes,
             'history' => (new ExhibitorHistory($this->ctx->db))->previous((int) $exhibitor['id']),
+            'stages' => ExhibitorPipelineController::STAGES,
+            'liveCount' => (int) $this->ctx->db->fetchValue(
+                'SELECT COUNT(*) FROM registrations WHERE exhibitor_id = ?',
+                [(int) $exhibitor['id']],
+            ),
+            'heldCount' => (new HeldRegistrations($this->ctx->db))->countForExhibitor(
+                (int) $exhibitor['edition_id'],
+                (int) $exhibitor['id'],
+            ),
         ]);
     }
 
@@ -227,7 +231,7 @@ final class ExhibitorsAdminController extends Controller
 
         $sql = 'UPDATE exhibitors SET name = ?, short_description = ?, description = ?, categories = ?,
                        contact_person = ?, email = ?, phone = ?, website = ?, jobs = ?, features = ?,
-                       offer_types = ?, equipment = ?, visible_fields = ?, total_slots = ?, active = ?';
+                       offer_types = ?, equipment = ?, visible_fields = ?, total_slots = ?';
         $args = [
             $data['name'],
             $data['short_description'],
@@ -243,7 +247,6 @@ final class ExhibitorsAdminController extends Controller
             $data['equipment'],
             $data['visible_fields'],
             $data['total_slots'],
-            $data['active'],
         ];
         if ($newLogo !== null) {
             $sql .= ', logo = ?';
@@ -330,16 +333,30 @@ final class ExhibitorsAdminController extends Controller
         if ($checkins > 0) {
             $this->flash('error', sprintf(
                 'Für diesen Aussteller sind bereits %d Check-ins erfasst. Löschen würde sie mitsamt den '
-                . 'Anwesenheitsberichten unwiederbringlich entfernen. Bitte stattdessen absagen oder deaktivieren.',
+                . 'Anwesenheitsberichten unwiederbringlich entfernen. Bitte stattdessen absagen.',
                 $checkins,
             ));
             $this->redirect($this->ctx->schoolUrl('/admin/aussteller/' . $exhibitorId));
         }
 
+        // Löschen würde Buchungen und ruhende Buchungen per CASCADE still
+        // entfernen, ohne dass die Schüler:innen es erfahren. Der Weg dafür
+        // ist die Absage (benachrichtigt, Buchungen ruhen) und danach die
+        // Neuzuteilung; erst ein Aussteller ohne beides darf weg.
         $registrations = (int) $this->ctx->db->fetchValue(
-            'SELECT COUNT(*) FROM registrations WHERE exhibitor_id = ? AND edition_id = ? AND timeslot_id IS NOT NULL',
+            'SELECT COUNT(*) FROM registrations WHERE exhibitor_id = ? AND edition_id = ?',
             [$exhibitorId, $editionId],
         );
+        $held = (new HeldRegistrations($this->ctx->db))->countForExhibitor($editionId, $exhibitorId);
+        if ($registrations > 0 || $held > 0) {
+            $this->flash('error', sprintf(
+                'Löschen ist gesperrt: %d Buchung(en) und %d ruhende Buchung(en) hängen an diesem Aussteller. '
+                . 'Sage ihn zuerst ab und teile die Betroffenen neu zu.',
+                $registrations,
+                $held,
+            ));
+            $this->redirect($this->ctx->schoolUrl('/admin/aussteller/' . $exhibitorId));
+        }
 
         // Dateinamen vor dem CASCADE-Delete einsammeln
         $documents = $this->ctx->db->fetchAll(
@@ -364,13 +381,10 @@ final class ExhibitorsAdminController extends Controller
         $this->ctx->audit->log(
             'Aussteller gelöscht',
             'warning',
-            'Aussteller: ' . (string) $exhibitor['name'] . ' (ID ' . $exhibitorId . ')'
-                . ($registrations > 0 ? sprintf(' — dabei %d Zuteilungen entfernt', $registrations) : ''),
+            'Aussteller: ' . (string) $exhibitor['name'] . ' (ID ' . $exhibitorId . ')',
             $this->ctx->schoolId(),
         );
-        $this->flash('success', $registrations > 0
-            ? sprintf('Der Aussteller wurde gelöscht. %d Zuteilungen wurden dabei entfernt.', $registrations)
-            : 'Der Aussteller wurde gelöscht.');
+        $this->flash('success', 'Der Aussteller wurde gelöscht.');
         $this->redirect($this->ctx->schoolUrl('/admin/aussteller'));
     }
 
@@ -384,7 +398,8 @@ final class ExhibitorsAdminController extends Controller
         $edition = $this->ctx->requireEdition();
 
         $industries = $this->ctx->db->fetchAll(
-            'SELECT id, name, sort_order FROM industries ORDER BY sort_order ASC, name ASC',
+            'SELECT id, name, sort_order FROM industries WHERE school_id = ? ORDER BY sort_order ASC, name ASC',
+            [(int) $this->ctx->schoolId()],
         );
 
         // Nutzung innerhalb der aktuellen Edition zählen (categories ist JSON)
@@ -428,15 +443,19 @@ final class ExhibitorsAdminController extends Controller
             $this->flash('error', 'Bitte gib einen Branchennamen mit maximal 150 Zeichen an.');
             $this->redirect($back);
         }
-        $exists = $this->ctx->db->fetchValue('SELECT 1 FROM industries WHERE name = ?', [$name]);
+        $schoolId = (int) $this->ctx->schoolId();
+        $exists = $this->ctx->db->fetchValue(
+            'SELECT 1 FROM industries WHERE school_id = ? AND name = ?',
+            [$schoolId, $name],
+        );
         if ($exists !== null) {
             $this->flash('error', 'Diese Branche existiert bereits.');
             $this->redirect($back);
         }
 
         $this->ctx->db->run(
-            'INSERT INTO industries (name, sort_order) VALUES (?, ?)',
-            [$name, $sortOrder],
+            'INSERT INTO industries (school_id, name, sort_order) VALUES (?, ?, ?)',
+            [$schoolId, $name, $sortOrder],
         );
         $this->ctx->audit->log('Branche erstellt', 'info', 'Branche: ' . $name, $this->ctx->schoolId());
         $this->flash('success', 'Die Branche wurde angelegt.');
@@ -451,11 +470,9 @@ final class ExhibitorsAdminController extends Controller
         $this->requireCsrf();
 
         $back = $this->ctx->schoolUrl('/admin/branchen');
-        $id = (int) $params['id'];
-        $industry = $this->ctx->db->fetchOne('SELECT * FROM industries WHERE id = ?', [$id]);
-        if ($industry === null) {
-            throw new HttpException(404, 'Diese Branche existiert nicht.');
-        }
+        $industry = $this->findIndustry((int) $params['id']);
+        $id = (int) $industry['id'];
+        $schoolId = (int) $this->ctx->schoolId();
 
         $name = trim((string) ($_POST['name'] ?? ''));
         $sortOrder = $this->clampInt($_POST['sort_order'] ?? 0, 0, 65535);
@@ -464,8 +481,8 @@ final class ExhibitorsAdminController extends Controller
             $this->redirect($back);
         }
         $clash = $this->ctx->db->fetchValue(
-            'SELECT 1 FROM industries WHERE name = ? AND id <> ?',
-            [$name, $id],
+            'SELECT 1 FROM industries WHERE school_id = ? AND name = ? AND id <> ?',
+            [$schoolId, $name, $id],
         );
         if ($clash !== null) {
             $this->flash('error', 'Eine Branche mit diesem Namen existiert bereits.');
@@ -473,15 +490,15 @@ final class ExhibitorsAdminController extends Controller
         }
 
         $this->ctx->db->run(
-            'UPDATE industries SET name = ?, sort_order = ? WHERE id = ?',
-            [$name, $sortOrder, $id],
+            'UPDATE industries SET name = ?, sort_order = ? WHERE id = ? AND school_id = ?',
+            [$name, $sortOrder, $id, $schoolId],
         );
 
-        // Umbenennung in den JSON-Kategorien der aktuellen Edition nachziehen
+        // Umbenennung in allen Editionen dieser Schule nachziehen
         $renamed = 0;
         $oldName = (string) $industry['name'];
-        if ($oldName !== $name && $this->ctx->editionId() !== null) {
-            $renamed = $this->renameCategory($oldName, $name);
+        if ($oldName !== $name) {
+            $renamed = $this->renameCategory($schoolId, $oldName, $name);
         }
 
         $this->ctx->audit->log(
@@ -502,14 +519,13 @@ final class ExhibitorsAdminController extends Controller
         $this->requireCsrf();
 
         $back = $this->ctx->schoolUrl('/admin/branchen');
-        $id = (int) $params['id'];
-        $industry = $this->ctx->db->fetchOne('SELECT * FROM industries WHERE id = ?', [$id]);
-        if ($industry === null) {
-            throw new HttpException(404, 'Diese Branche existiert nicht.');
-        }
+        $industry = $this->findIndustry((int) $params['id']);
 
         // Bewusst: bereits zugeordnete Namen bleiben in exhibitors.categories stehen.
-        $this->ctx->db->run('DELETE FROM industries WHERE id = ?', [$id]);
+        $this->ctx->db->run(
+            'DELETE FROM industries WHERE id = ? AND school_id = ?',
+            [(int) $industry['id'], (int) $this->ctx->schoolId()],
+        );
         $this->ctx->audit->log(
             'Branche gelöscht',
             'warning',
@@ -655,7 +671,8 @@ final class ExhibitorsAdminController extends Controller
     private function industryNames(array $extra = []): array
     {
         $rows = $this->ctx->db->fetchAll(
-            'SELECT name FROM industries ORDER BY sort_order ASC, name ASC',
+            'SELECT name FROM industries WHERE school_id = ? ORDER BY sort_order ASC, name ASC',
+            [(int) $this->ctx->schoolId()],
         );
         $names = array_map(static fn (array $row): string => (string) $row['name'], $rows);
         foreach ($extra as $name) {
@@ -689,14 +706,6 @@ final class ExhibitorsAdminController extends Controller
             $this->redirect($back);
         }
 
-        $website = trim((string) ($_POST['website'] ?? ''));
-        if ($website !== '' && !preg_match('#^https?://#i', $website)) {
-            $website = 'https://' . $website;
-        }
-        if (mb_strlen($website) > 255) {
-            $website = mb_substr($website, 0, 255);
-        }
-
         // Branchen: nur Namen, die es gibt oder die bereits zugeordnet waren
         $allowedCategories = $this->industryNames(
             self::decodeList($_POST['known_categories'] ?? null),
@@ -709,16 +718,6 @@ final class ExhibitorsAdminController extends Controller
         }
         $categories = array_values(array_unique($categories));
 
-        // Angebotstypen
-        $selected = [];
-        foreach ((array) ($_POST['offer_types_selected'] ?? []) as $value) {
-            if (is_string($value) && in_array($value, self::OFFER_TYPES, true)) {
-                $selected[] = $value;
-            }
-        }
-        $selected = array_values(array_unique($selected));
-        $offerCustom = mb_substr(trim((string) ($_POST['offer_types_custom'] ?? '')), 0, 200);
-
         // Sichtbare Profilfelder
         $visible = [];
         foreach ((array) ($_POST['visible_fields'] ?? []) as $value) {
@@ -730,22 +729,22 @@ final class ExhibitorsAdminController extends Controller
 
         return [
             'name' => $name,
-            'short_description' => $this->nullable($_POST['short_description'] ?? '', 500),
-            'description' => $this->nullable($_POST['description'] ?? '', 20000),
+            'short_description' => ExhibitorProfile::text($_POST['short_description'] ?? null, 'short_description'),
+            'description' => ExhibitorProfile::text($_POST['description'] ?? null, 'description'),
             'categories' => $categories === [] ? null : json_encode($categories, JSON_UNESCAPED_UNICODE),
-            'contact_person' => $this->nullable($_POST['contact_person'] ?? '', 200),
-            'email' => $email === '' ? null : mb_substr($email, 0, 255),
-            'phone' => $this->nullable($_POST['phone'] ?? '', 50),
-            'website' => $website === '' ? null : $website,
-            'jobs' => $this->nullable($_POST['jobs'] ?? '', 20000),
-            'features' => $this->nullable($_POST['features'] ?? '', 20000),
-            'offer_types' => ($selected === [] && $offerCustom === '')
-                ? null
-                : json_encode(['selected' => $selected, 'custom' => $offerCustom], JSON_UNESCAPED_UNICODE),
-            'equipment' => $this->nullable($_POST['equipment'] ?? '', 500),
+            'contact_person' => ExhibitorProfile::text($_POST['contact_person'] ?? null, 'contact_person'),
+            'email' => $email === '' ? null : mb_substr($email, 0, ExhibitorProfile::MAX_LENGTHS['email']),
+            'phone' => ExhibitorProfile::text($_POST['phone'] ?? null, 'phone'),
+            'website' => ExhibitorProfile::website($_POST['website'] ?? null),
+            'jobs' => ExhibitorProfile::text($_POST['jobs'] ?? null, 'jobs'),
+            'features' => ExhibitorProfile::text($_POST['features'] ?? null, 'features'),
+            'offer_types' => ExhibitorProfile::encodeOffers(
+                $_POST['offer_types_selected'] ?? [],
+                $_POST['offer_types_custom'] ?? null,
+            ),
+            'equipment' => ExhibitorProfile::text($_POST['equipment'] ?? null, 'equipment'),
             'visible_fields' => json_encode($visible, JSON_UNESCAPED_UNICODE),
             'total_slots' => $this->clampInt($_POST['total_slots'] ?? 25, 0, 9999),
-            'active' => isset($_POST['active']) ? 1 : 0,
         ];
     }
 
@@ -761,7 +760,7 @@ final class ExhibitorsAdminController extends Controller
             $stored = $this->uploads()->store(
                 $file,
                 'logos',
-                self::LOGO_EXTENSIONS,
+                ExhibitorProfile::LOGO_EXTENSIONS,
                 (int) ($this->ctx->config['uploads']['max_logo_bytes'] ?? 2097152),
             );
         } catch (HttpException $e) {
@@ -798,7 +797,7 @@ final class ExhibitorsAdminController extends Controller
             'equipment' => (string) ($row['equipment'] ?? ''),
             'visible_fields' => $row === null ? ['website'] : self::decodeVisibleFields($row['visible_fields']),
             'total_slots' => (int) ($row['total_slots'] ?? 25),
-            'active' => $row === null ? 1 : (int) $row['active'],
+            'pipeline_status' => (string) ($row['pipeline_status'] ?? 'confirmed'),
         ];
 
         $old = $this->ctx->session->pullOldInput();
@@ -823,19 +822,25 @@ final class ExhibitorsAdminController extends Controller
         if (isset($old['total_slots'])) {
             $values['total_slots'] = $this->clampInt($old['total_slots'], 0, 9999);
         }
-        if (array_key_exists('name', $old)) {
-            $values['active'] = isset($old['active']) ? 1 : 0;
+        if (isset($old['pipeline_status']) && isset(ExhibitorPipelineController::STAGES[$old['pipeline_status']])) {
+            $values['pipeline_status'] = (string) $old['pipeline_status'];
         }
 
         return $values;
     }
 
-    /** Benennt eine Branche in den categories-JSONs der aktiven Edition um. */
-    private function renameCategory(string $oldName, string $newName): int
+    /**
+     * Benennt eine Branche in den categories-JSONs aller Editionen der Schule um.
+     * Branchen gehören der Schule, also gilt der neue Name auch für frühere Jahrgänge.
+     */
+    private function renameCategory(int $schoolId, string $oldName, string $newName): int
     {
         $rows = $this->ctx->db->fetchAll(
-            'SELECT id, categories FROM exhibitors WHERE edition_id = ? AND categories IS NOT NULL',
-            [(int) $this->ctx->requireEdition()['id']],
+            'SELECT e.id, e.categories
+             FROM exhibitors e
+             JOIN messe_editions me ON me.id = e.edition_id
+             WHERE me.school_id = ? AND e.categories IS NOT NULL',
+            [$schoolId],
         );
 
         $count = 0;
@@ -849,12 +854,8 @@ final class ExhibitorsAdminController extends Controller
                 $list,
             )));
             $this->ctx->db->run(
-                'UPDATE exhibitors SET categories = ? WHERE id = ? AND edition_id = ?',
-                [
-                    json_encode($list, JSON_UNESCAPED_UNICODE),
-                    (int) $row['id'],
-                    (int) $this->ctx->requireEdition()['id'],
-                ],
+                'UPDATE exhibitors SET categories = ? WHERE id = ?',
+                [json_encode($list, JSON_UNESCAPED_UNICODE), (int) $row['id']],
             );
             $count++;
         }
@@ -862,14 +863,18 @@ final class ExhibitorsAdminController extends Controller
         return $count;
     }
 
-    private function nullable(mixed $value, int $maxLength): ?string
+    /** @return array<string, mixed> Branche dieser Schule (sonst 404). */
+    private function findIndustry(int $id): array
     {
-        $text = trim((string) $value);
-        if ($text === '') {
-            return null;
+        $industry = $this->ctx->db->fetchOne(
+            'SELECT * FROM industries WHERE id = ? AND school_id = ?',
+            [$id, (int) $this->ctx->schoolId()],
+        );
+        if ($industry === null) {
+            throw new HttpException(404, 'Diese Branche existiert nicht.');
         }
 
-        return mb_substr($text, 0, $maxLength);
+        return $industry;
     }
 
     private function clampInt(mixed $value, int $min, int $max): int

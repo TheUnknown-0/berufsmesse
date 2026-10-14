@@ -91,6 +91,8 @@ final class Waitlist
             if ($stmt->rowCount() !== 1) {
                 return null;
             }
+            // Neue Buchung im Slot: eine dort ruhende (Absage) ist überholt.
+            (new HeldRegistrations($this->db))->clearSlot($editionId, (int) $found['user_id'], $timeslotId);
             $this->capacity->reserve($editionId, $exhibitorId, $timeslotId);
 
             // Anzeigedaten für Rückgabe und Benachrichtigung

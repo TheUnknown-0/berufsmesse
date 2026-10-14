@@ -171,8 +171,9 @@ foreach ($exhibitors as $exhibitorRow) {
                         </div>
                     <?php else: ?>
                         <div class="alert alert-error" role="status">
-                            Die Absage wird sofort wirksam. Alle bestehenden Anmeldungen werden aufgelöst und die
-                            betroffenen Schüler:innen benachrichtigt.
+                            Die Absage wird sofort wirksam. Die angemeldeten Schüler:innen werden benachrichtigt
+                            und von der Schule anderen Ausstellern zugeteilt. Du verlierst den Zugriff auf dieses
+                            Unternehmen im Portal.
                         </div>
                     <?php endif; ?>
                     <div class="field">

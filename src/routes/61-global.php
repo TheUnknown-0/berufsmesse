@@ -18,7 +18,6 @@ return static function (Router $r): void {
     $r->get('/global-admin', [GlobalAdminController::class, 'index']);
     $r->post('/global-admin/einstellungen', [GlobalAdminController::class, 'saveSettings']);
     $r->get('/global-admin/aussteller-konten', [GlobalAdminController::class, 'accounts']);
-    $r->post('/global-admin/aussteller-konten/verknuepfung/{id}/erneuern', [GlobalAdminController::class, 'renewInvite']);
     $r->post('/global-admin/aussteller-konten/verknuepfung/{id}/entfernen', [GlobalAdminController::class, 'removeLink']);
     $r->post('/global-admin/aussteller-konten/{id}', [GlobalAdminController::class, 'updateAccount']);
     $r->post('/global-admin/aussteller-konten/{id}/passwort', [GlobalAdminController::class, 'resetAccountPassword']);

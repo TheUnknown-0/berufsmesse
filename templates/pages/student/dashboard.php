@@ -132,6 +132,10 @@ $widgets = page_blocks('uebersicht', [
                                         <?php if (!empty($slot['registration']['room_number'])): ?>
                                             <span class="text-sm text-soft">· Raum <?= e($slot['registration']['room_number']) ?></span>
                                         <?php endif; ?>
+                                    <?php elseif (!empty($slot['held'])): ?>
+                                        <s class="text-soft"><?= e($slot['held']['exhibitor_name']) ?></s>
+                                        <span class="badge badge-warning">abgesagt</span>
+                                        <span class="text-sm text-soft">neuer Termin folgt</span>
                                     <?php else: ?>
                                         <span class="text-soft">Noch keine Zuteilung</span>
                                     <?php endif; ?>

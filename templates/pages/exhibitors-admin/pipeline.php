@@ -179,6 +179,25 @@ $stageBadge = static fn (string $stage): string => match ($stage) {
                             <div class="hint">„Zugesagt“ macht den Aussteller sichtbar, alle anderen Stufen blenden ihn aus.</div>
                         </div>
 
+                        <?php if ((int) $exhibitor['active'] === 1 && (int) $exhibitor['registration_count'] > 0): ?>
+                            <div class="alert alert-warning" role="status">
+                                <div>
+                                    <?= e((string) $exhibitor['registration_count']) ?> Schüler:innen haben hier Buchungen.
+                                    Jede Stufe außer „Zugesagt“ ist eine <strong>Absage</strong>: Die Buchungen ruhen,
+                                    bis ihr neu zuteilt, die Schüler:innen und das Unternehmen werden benachrichtigt.
+                                    <label class="checkbox-row" style="margin-top:8px;">
+                                        <input type="checkbox" name="absage_bestaetigt" value="1">
+                                        <span>Ja, bei einer anderen Stufe absagen</span>
+                                    </label>
+                                </div>
+                            </div>
+                        <?php elseif ((int) $exhibitor['active'] !== 1 && (int) $exhibitor['held_count'] > 0): ?>
+                            <div class="alert alert-info" role="status">
+                                Zurück auf „Zugesagt“ nimmt die Absage zurück: <?= e((string) $exhibitor['held_count']) ?>
+                                ruhende Buchung(en) werden wieder aktiv, soweit der Slot noch frei ist.
+                            </div>
+                        <?php endif; ?>
+
                         <div class="field">
                             <label for="follow-<?= e((string) $id) ?>">Wiedervorlage am</label>
                             <input class="input" type="date" id="follow-<?= e((string) $id) ?>" name="follow_up_at"
