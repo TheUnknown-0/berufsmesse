@@ -25,7 +25,12 @@ services:
         max-file: "3"
 
   app:
-    build: .
+    build:
+      context: .
+      # Basis-Image bei jedem Build frisch holen. Sonst nimmt "up --build"
+      # das zwischengespeicherte php:8.3-apache, und Sicherheits-Releases
+      # von PHP kommen nie auf dem Server an.
+      pull: true
     container_name: berufsmesse-app
     ports:
       - "${APP_PORT:-9010}:80"

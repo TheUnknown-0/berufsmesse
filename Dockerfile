@@ -1,5 +1,16 @@
 FROM php:8.3-apache
 
+# Mindestversion mit den Fixes gegen PHP2Shell (CVE-2026-109618/-109619,
+# Release 21.10.2026). Liefert der Build trotz "pull: true" in compose.yaml
+# ein älteres Basis-Image, bricht er hier ab, statt still ein verwundbares
+# PHP auszurollen. Bei neuen Sicherheits-Releases hier nachziehen.
+ARG PHP_MIN_VERSION=8.3.36
+RUN php -r 'if (version_compare(PHP_VERSION, getenv("PHP_MIN_VERSION"), "<")) { \
+        fwrite(STDERR, "PHP " . PHP_VERSION . " ist älter als " . getenv("PHP_MIN_VERSION") \
+            . ". Basis-Image neu holen: docker compose build --pull\n"); \
+        exit(1); \
+    }'
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libpng-dev libjpeg-dev libfreetype6-dev libzip-dev default-mysql-client \
