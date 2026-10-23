@@ -40,4 +40,10 @@ return [
         'from_address' => $env('MAIL_FROM_ADDRESS', ''),
         'from_name' => $env('MAIL_FROM_NAME', 'Berufsmesse'),
     ],
+    // Sicherheitscheck der Server-Umgebung (bin/security-check.php), Abstand
+    // in Sekunden. 0 = aus. Braucht ausgehenden Zugriff auf GitHub, php.net,
+    // osv.dev und mariadb.org.
+    'security_check' => [
+        'interval' => (int) $env('SECURITY_CHECK_INTERVAL', '21600'),
+    ],
 ];

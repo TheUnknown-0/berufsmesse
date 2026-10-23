@@ -1,7 +1,7 @@
 <?php
 /**
  * Global-Admin — Übersicht über alle Schulen und das System.
- * Erwartet: $schools, $system, $publicBaseUrl.
+ * Erwartet: $schools, $system, $publicBaseUrl, $security.
  */
 ?>
 <div class="page-header">
@@ -13,6 +13,8 @@
 </div>
 
 <?= $view->renderPartial('pages/global/_nav', ['active' => '/global-admin']) ?>
+
+<?= $view->renderPartial('pages/global/_security', ['security' => $security]) ?>
 
 <div class="stat-grid">
     <div class="stat-card stat-accent">

@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Services\EmailService;
 use App\Services\Mailer;
+use App\Services\SecurityCheck;
 
 /**
  * Global-Admin: schulübergreifende Übersicht, systemweite
@@ -62,7 +63,28 @@ final class GlobalAdminController extends Controller
             'schools' => $schools,
             'system' => $system,
             'publicBaseUrl' => $this->ctx->settings->get('public_base_url') ?? '',
+            'security' => $this->securityStatus(),
         ]);
+    }
+
+    /**
+     * Zustand des Sicherheitschecks (bin/security-check.php) für das Banner.
+     *
+     * @return array{enabled: bool, stale: bool, state: ?array}
+     */
+    private function securityStatus(): array
+    {
+        $interval = (int) ($this->ctx->config['security_check']['interval'] ?? 0);
+        $state = SecurityCheck::lastState($this->ctx->settings);
+        $checkedAt = isset($state['checked_at']) ? strtotime((string) $state['checked_at']) : false;
+
+        return [
+            'enabled' => $interval > 0,
+            // Zwei verpasste Läufe plus Puffer: Dann läuft die Hintergrundprüfung
+            // offenbar nicht, und „keine Funde“ wäre irreführend.
+            'stale' => $interval > 0 && ($checkedAt === false || time() - $checkedAt > 2 * $interval + 3600),
+            'state' => $state,
+        ];
     }
 
     /** POST /global-admin/einstellungen — systemweite Einstellungen. */

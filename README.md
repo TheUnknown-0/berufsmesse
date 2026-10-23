@@ -39,6 +39,7 @@ phpMyAdmin (nur bei Bedarf): `docker compose --profile tools up -d` → Port 808
 | `TRUSTED_PROXIES` | *(nur localhost)* | CIDR-Liste für X-Forwarded-For — **nur die eigenen Reverse-Proxys**, niemals ganze Netze (siehe `.env.example`) |
 | `DB_WAIT_TIMEOUT` | `120` | Sekunden, die der Start auf die Datenbank wartet |
 | `SECURE_COOKIES` | Auto | `1` erzwingt Secure-Flag (hinter HTTPS-Proxy) |
+| `SECURITY_CHECK_INTERVAL` | `21600` | Sekunden zwischen zwei Sicherheitschecks (siehe unten), `0` = aus |
 
 ## Architektur
 
@@ -59,6 +60,23 @@ gleichzeitig startende Container können sich nicht ins Gehege kommen.
 Bricht eine Migration mitten in einer Datei ab, meldet der Start das
 ausdrücklich: Das Schema ist dann teilweise angewendet und muss von Hand
 geprüft werden.
+
+### Sicherheitsupdates
+
+`docker compose up -d --build` holt bei jedem Build das aktuelle Basis-Image
+`php:8.3-apache` (`pull: true` in `compose.yaml`). Ein Update besteht also aus
+`git pull` und diesem Befehl. Der Build bricht ab, wenn PHP älter als die im
+`Dockerfile` hinterlegte Mindestversion (`PHP_MIN_VERSION`) ist.
+
+Im Container prüft `bin/security-check.php` alle sechs Stunden, ob es für die
+laufende Umgebung bekannte Lücken gibt: PHP (Advisories von php-src), die
+Debian-Pakete des Containers wie Apache, OpenSSL und libxml2 (OSV.dev) und, nur
+als Hinweis, neuere MariaDB-Patch-Versionen. Neue Lücken mit hohem oder
+kritischem Schweregrad gehen als Benachrichtigung an alle Global-Admins, die
+Übersicht steht im Global-Admin. Die Prüfung braucht ausgehenden Zugriff auf
+`api.github.com`, `php.net`, `api.osv.dev` und `downloads.mariadb.org`. Ohne
+Internet zeigt der Global-Admin „unvollständig“ statt „alles in Ordnung“; im
+reinen Schulnetz `SECURITY_CHECK_INTERVAL=0` setzen.
 
 ## Backup
 

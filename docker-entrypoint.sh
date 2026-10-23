@@ -23,4 +23,18 @@ done
 echo "Führe Migrationen aus..."
 php /var/www/html/bin/migrate.php
 
+# Sicherheitscheck (PHP, Systempakete, MariaDB) regelmäßig im Hintergrund.
+# Läuft als www-data, nicht als root. Ein Fehlschlag (etwa ohne Internet)
+# beendet die Schleife nicht; das Ergebnis steht im Global-Admin.
+SECURITY_CHECK_INTERVAL="${SECURITY_CHECK_INTERVAL:-21600}"
+if [ "${SECURITY_CHECK_INTERVAL}" -gt 0 ] 2>/dev/null; then
+    (
+        while true; do
+            setpriv --reuid=www-data --regid=www-data --init-groups \
+                php /var/www/html/bin/security-check.php || true
+            sleep "${SECURITY_CHECK_INTERVAL}"
+        done
+    ) &
+fi
+
 exec "$@"
