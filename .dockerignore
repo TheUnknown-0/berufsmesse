@@ -4,3 +4,4 @@ uploads/*
 *.md
 .idea
 .vscode
+!CHANGELOG.md

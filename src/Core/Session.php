@@ -47,6 +47,18 @@ final class Session
         session_regenerate_id(true);
     }
 
+    /**
+     * Schreibt die Sitzung und gibt die Sperre frei. Für Anfragen, die danach
+     * lange auf etwas warten (z. B. Update-Prüfung), damit andere Anfragen
+     * derselben Sitzung nicht blockieren. Danach nichts mehr in die Sitzung schreiben.
+     */
+    public function release(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
+
     public function destroy(): void
     {
         $_SESSION = [];

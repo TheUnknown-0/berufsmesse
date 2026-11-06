@@ -46,4 +46,9 @@ return [
     'security_check' => [
         'interval' => (int) $env('SECURITY_CHECK_INTERVAL', '21600'),
     ],
+    // Update-Prüfung (Services\UpdateCheck): CHANGELOG.md des Repos, oberste
+    // Version = neueste. UPDATE_CHECK_URL=off schaltet die Prüfung ab.
+    'updates' => [
+        'url' => $env('UPDATE_CHECK_URL', 'https://raw.githubusercontent.com/TheUnknown-0/berufsmesse/main/CHANGELOG.md'),
+    ],
 ];

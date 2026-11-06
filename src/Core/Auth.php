@@ -72,6 +72,10 @@ final class Auth
         $this->session->set('user_id', (int) $user['id']);
         // Unveränderliche Heimat-Schule für spätere Zugriffsprüfungen
         $this->session->set('user_school_id', $user['school_id'] !== null ? (int) $user['school_id'] : null);
+        if (($user['role'] ?? '') === 'admin') {
+            // Die nächste Seite fragt nach einer neuen Version (Services\UpdateCheck).
+            $this->session->set(\App\Services\UpdateCheck::SESSION_DUE, true);
+        }
         $this->user = false;
         $this->permissions = null;
     }

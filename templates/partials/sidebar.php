@@ -186,5 +186,6 @@ if ($user !== null && $ctx->editionId() !== null) {
 
     <div class="sidebar-footer">
         Berufsmesse
+        <?= $view->renderPartial('partials/version') ?>
     </div>
 </aside>

@@ -40,6 +40,7 @@ phpMyAdmin (nur bei Bedarf): `docker compose --profile tools up -d` → Port 808
 | `DB_WAIT_TIMEOUT` | `120` | Sekunden, die der Start auf die Datenbank wartet |
 | `SECURE_COOKIES` | Auto | `1` erzwingt Secure-Flag (hinter HTTPS-Proxy) |
 | `SECURITY_CHECK_INTERVAL` | `21600` | Sekunden zwischen zwei Sicherheitschecks (siehe unten), `0` = aus |
+| `UPDATE_CHECK_URL` | `CHANGELOG.md` auf GitHub `main` | Quelle der Update-Prüfung (siehe unten), `off` = aus |
 
 ## Architektur
 
@@ -77,6 +78,27 @@ kritischem Schweregrad gehen als Benachrichtigung an alle Global-Admins, die
 `api.github.com`, `php.net`, `api.osv.dev` und `downloads.mariadb.org`. Ohne
 Internet zeigt der Global-Admin „unvollständig“ statt „alles in Ordnung“; im
 reinen Schulnetz `SECURITY_CHECK_INTERVAL=0` setzen.
+
+### Versionen und Updates
+
+Die Versionsnummer steht unten in der Seitenleiste und kommt aus `CHANGELOG.md`:
+Die oberste Zeile `## X.Y.Z (JJJJ-MM-TT)` ist die installierte Version. Global- und
+Schul-Admins öffnen per Klick auf die Nummer den Änderungsverlauf.
+
+Für Global-Admins vergleicht die Berufsmesse diese Version mit `CHANGELOG.md` auf
+`main` im öffentlichen Repo: nach jeder Anmeldung, einmal täglich beim Öffnen einer
+Seite und über den Knopf „Nach neuen Versionen suchen“ im Versionsdialog. Die Abfrage
+läuft im Hintergrund der Seite, nichts wartet auf GitHub. Gefragt wird
+`raw.githubusercontent.com` (nicht die REST-API), höchstens einmal pro Minute (bei
+Anmeldung wie per Knopf, zusätzlich hart 60 pro Stunde); eine unveränderte Datei kommt per ETag als „304“ ohne Inhalt zurück, und
+nach HTTP 429/403 pausiert die Prüfung gemäß `Retry-After` (sonst eine Stunde). Eine neue Version erscheint
+als Kennzeichen „Update“ an der Versionsnummer und geht einmalig als Benachrichtigung
+an alle Global-Admins. Eingespielt wird sie wie oben: `git pull` und
+`docker compose up -d --build`. Ohne Internet `UPDATE_CHECK_URL=off` setzen.
+
+**Neue Version veröffentlichen:** Oben in `CHANGELOG.md` einen Abschnitt mit höherer
+Nummer und kurzen Punkten für Admins eintragen, mit dem Code committen und auf `main`
+pushen. Kleine Korrekturen erhöhen die letzte Stelle, neue Funktionen die mittlere.
 
 ## Backup
 

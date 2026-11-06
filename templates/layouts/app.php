@@ -30,6 +30,7 @@ $baseUrl = $ctx->config['app']['base_url'];
     </div>
 </div>
 <?= $view->renderPartial('partials/arrange-bar') ?>
+<?= $view->renderPartial('partials/version-modal') ?>
 <script src="<?= e($baseUrl) ?>/assets/js/app.js"></script>
 <script src="<?= e($baseUrl) ?>/assets/js/easter-egg.js"></script>
 <script src="<?= e($baseUrl) ?>/assets/js/tour.js"></script>

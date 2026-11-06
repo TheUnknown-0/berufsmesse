@@ -48,6 +48,8 @@ services:
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       # Sicherheitscheck alle N Sekunden (Standard 6 h), 0 = aus.
       SECURITY_CHECK_INTERVAL: ${SECURITY_CHECK_INTERVAL:-21600}
+      # Update-Prüfung gegen CHANGELOG.md auf GitHub. off = aus, leer = Standard.
+      UPDATE_CHECK_URL: ${UPDATE_CHECK_URL:-}
       # E-Mail-Versand (Anmeldung per Code, Test-Mail). Leer = deaktiviert.
       MAIL_HOST: ${MAIL_HOST:-}
       MAIL_PORT: ${MAIL_PORT:-587}
