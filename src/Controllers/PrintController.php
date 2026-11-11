@@ -826,6 +826,7 @@ final class PrintController extends Controller
                     'UPDATE users SET password = ?, must_change_password = 1 WHERE id = ?',
                     [password_hash($plainPasswords[$index], PASSWORD_DEFAULT), (int) $user['id']],
                 );
+                (new \App\Services\ApiTokens($database))->revokeAllForUser((int) $user['id']);
             }
         });
 

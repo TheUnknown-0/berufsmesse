@@ -251,6 +251,7 @@ final class GlobalAdminController extends Controller
 
         if (($_POST['mode'] ?? '') === 'entfernen') {
             $this->ctx->db->run('UPDATE users SET password = NULL WHERE id = ?', [(int) $account['id']]);
+            (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser((int) $account['id']);
             $this->ctx->audit->log('Aussteller-Konto: Passwort entfernt', 'warning', 'Benutzer: ' . (string) $account['username']);
             $this->flash('success', 'Passwort entfernt. Das Konto ist gesperrt, bis du hier ein neues Passwort setzt.');
             $this->redirect($back);
@@ -266,6 +267,7 @@ final class GlobalAdminController extends Controller
             'UPDATE users SET password = ?, must_change_password = 1 WHERE id = ?',
             [password_hash($password, PASSWORD_DEFAULT), (int) $account['id']],
         );
+        (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser((int) $account['id']);
         $this->ctx->session->set('global_konto_pw', [
             'username' => (string) $account['username'],
             'password' => $password,

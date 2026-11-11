@@ -29,6 +29,12 @@ final class Csrf
 
     public function validate(?string $token): bool
     {
+        // App-Schnittstelle: Anmeldung per Bearer-Token ohne Cookie-Sitzung. Den
+        // Header schickt ein Browser nie von selbst mit, CSRF ist dort nicht möglich.
+        if ($this->session->isStateless()) {
+            return true;
+        }
+
         $expected = $this->session->get(self::SESSION_KEY);
 
         return is_string($expected) && is_string($token) && hash_equals($expected, $token);

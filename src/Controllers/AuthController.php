@@ -330,6 +330,10 @@ final class AuthController extends Controller
             'UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?',
             [password_hash($new, PASSWORD_DEFAULT), (int) $user['id']],
         );
+        // Alle App-Geräte abmelden. Kommt der Wechsel selbst aus der App (Web-Übergabe),
+        // bleibt dieses eine Gerät angemeldet.
+        $appToken = $this->ctx->session->get(\App\Services\ApiTokens::SESSION_TOKEN_KEY);
+        (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser((int) $user['id'], is_int($appToken) ? $appToken : null);
         $this->ctx->audit->log('Passwort geändert', 'info', null, $user['school_id'] !== null ? (int) $user['school_id'] : null);
         $this->flash('success', 'Dein Passwort wurde geändert.');
         $this->redirect($this->afterLoginUrl(array_merge($user, ['must_change_password' => 0])));

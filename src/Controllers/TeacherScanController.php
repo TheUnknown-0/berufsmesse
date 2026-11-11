@@ -21,6 +21,49 @@ final class TeacherScanController extends Controller
     {
         $this->requireSchool($params['school']);
         $user = $this->requireScanner();
+
+        return $this->render('pages/scan/index', [
+            'title' => 'Scanner',
+            ...$this->setupData($user),
+            'pageScripts' => ['vendor/jsqr.min.js', 'qr-camera.js', 'scan-queue.js', 'teacher-scan.js'],
+        ]);
+    }
+
+    /** GET /api/v1/{school}/scanner — Räume, Slots und eigene Aufsichten für den Scanner der App. */
+    public function apiSetup(array $params): array
+    {
+        $this->requireSchool($params['school']);
+        $user = $this->requireScanner();
+        $data = $this->setupData($user);
+
+        return [
+            'success' => true,
+            'enabled' => $data['enabled'],
+            'rooms' => array_map(static fn (array $r): array => [
+                'id' => (int) $r['id'],
+                'label' => AttendanceService::roomLabel($r['room_number'] ?? null, $r['room_name'] ?? null),
+                'exhibitor' => $r['exhibitor_name'],
+            ], $data['rooms']),
+            'slots' => array_values(array_map(static fn (array $s): array => [
+                'id' => (int) $s['id'],
+                'label' => (string) ($s['slot_name'] ?: ('Slot ' . $s['slot_number'])),
+                'start' => substr((string) $s['start_time'], 0, 5),
+                'end' => substr((string) $s['end_time'], 0, 5),
+            ], array_filter($data['slots'], static fn (array $s): bool => (int) ($s['is_break'] ?? 0) === 0))),
+            'selected_room_id' => $data['selectedRoomId'],
+            'selected_slot_id' => $data['selectedSlotId'],
+        ];
+    }
+
+    /**
+     * Gemeinsame Daten von Scanner-Seite und App: Räume, Slots, eigene Aufsichten
+     * und die Vorauswahl (aktueller Slot, Raum der passenden Aufsicht).
+     *
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     */
+    private function setupData(array $user): array
+    {
         $edition = $this->ctx->requireEdition();
         $editionId = (int) $edition['id'];
 
@@ -66,8 +109,7 @@ final class TeacherScanController extends Controller
             }
         }
 
-        return $this->render('pages/scan/index', [
-            'title' => 'Scanner',
+        return [
             'enabled' => $enabled,
             'edition' => $edition,
             'rooms' => $rooms,
@@ -75,8 +117,7 @@ final class TeacherScanController extends Controller
             'assignments' => $assignments,
             'selectedRoomId' => $selectedRoomId,
             'selectedSlotId' => $currentSlotId,
-            'pageScripts' => ['vendor/jsqr.min.js', 'qr-camera.js', 'scan-queue.js', 'teacher-scan.js'],
-        ]);
+        ];
     }
 
     /** POST /{school}/api/scan/checkin */

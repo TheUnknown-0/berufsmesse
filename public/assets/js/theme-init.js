@@ -5,6 +5,13 @@
     // den Seitenfluss gestellt statt in eine ausklappbare Leiste.
     document.documentElement.classList.remove('no-js');
 
+    // In der Android-App gibt die App das Theme vor (data-app-theme, siehe layouts/app.php).
+    var appTheme = document.documentElement.getAttribute('data-app-theme');
+    if (appTheme === 'dark' || appTheme === 'light') {
+        document.documentElement.setAttribute('data-theme', appTheme);
+        return;
+    }
+
     try {
         var stored = localStorage.getItem('bm-theme');
         var theme = stored === 'dark' || stored === 'light'

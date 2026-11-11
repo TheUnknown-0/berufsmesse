@@ -191,6 +191,16 @@ Verhalten im Zweifel im Original nachlesen (`../Berufsmesse-original/`): `functi
 - Guided Tours: NUR per Knopfdruck startbar, nie automatisch.
 - Kein Easter Egg außer Retro (bereits umgesetzt).
 
+## App-Schnittstelle (`/api/v1/`)
+
+Für die Android-App (eigenes Repo `berufsmesse-app`). Routen in `src/routes/02-app-api.php`.
+
+- **Anmeldung per Bearer-Token**, nicht per Cookie: `Services\AppApi` startet für `/api/v1/…` eine zustandslose Sitzung (`Session::startStateless`) und trägt das Konto aus dem Token dort ein. Alle Guards (`requireLogin`, `requireSchool`, `Auth::can`) wirken unverändert; `Csrf::validate` lässt diese Anfragen durch (der Header kommt nie vom Browser).
+- **Tokens** (`Services\ApiTokens`, Tabelle `api_tokens`): nur der SHA-256-Hash liegt in der DB, 180 Tage gültig. **Jede Passwortänderung widerruft die Tokens des Kontos** (`revokeAllForUser`): eigener Wechsel, Reset durch Admins, Zugangsdaten-PDF. Wer neue Stellen baut, an denen ein Passwort gesetzt wird, ruft das mit auf.
+- **Fachlogik nicht doppeln:** Native Bildschirme nutzen dieselben Controller-Aktionen wie die Web-Seiten (Check-in, Scanner, Orga-Chat, Benachrichtigungen), nur unter `/api/v1/{school}/…` registriert.
+- **Funktionsliste** (`Services\AppNavigation`) spiegelt `templates/partials/sidebar.php`. Neue Menüpunkte dort UND hier eintragen.
+- **Web-Übergabe:** `POST /api/v1/web-sitzung` liefert einen Einmal-Link `/app/uebergabe/{code}` (60 s, einmal). Er startet die Cookie-Sitzung der WebView im **App-Modus**: Layout ohne Seitenleiste und Kopfzeile, Theme der App (`data-app-theme`). Ändert das Konto dort sein Passwort, bleibt genau dieses App-Gerät angemeldet.
+
 ## Seiten-Blöcke (Anordnen-Modus)
 
 Jede inhaltliche Seite deklariert ihre Abschnitte als **Blöcke**, damit Schul-Admins sie pro Schule per Drag & Drop anordnen und ausblenden können (Button „🧩 Anordnen" in der Topbar, Modus `?anordnen=1`). Kern: `src/Core/PageBlocks.php`; Speicherung als Setting `page_layout:{pageKey}` je Schule.

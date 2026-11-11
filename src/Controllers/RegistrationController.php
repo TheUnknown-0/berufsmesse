@@ -330,10 +330,11 @@ final class RegistrationController extends Controller
 
     /**
      * Anmeldungen eines Schülers inkl. Aussteller-, Raum- und Slot-Angaben.
+     * Auch für die App (StudentController::apiPlan).
      *
      * @return list<array<string, mixed>>
      */
-    private function ownRegistrations(int $userId, int $editionId): array
+    public function ownRegistrations(int $userId, int $editionId): array
     {
         return $this->ctx->db->fetchAll(
             'SELECT r.id, r.exhibitor_id, r.timeslot_id, r.priority, r.registration_type, r.registered_at,

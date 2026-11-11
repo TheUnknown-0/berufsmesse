@@ -218,6 +218,7 @@ final class GlobalAdminsController extends Controller
                 "UPDATE users SET password = NULL, must_change_password = 1 WHERE id = ? AND role = 'admin'",
                 [$adminId],
             );
+            (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser($adminId);
             $this->ctx->audit->log(
                 'Passwort eines Global-Administrators geleert',
                 'warning',
@@ -232,6 +233,7 @@ final class GlobalAdminsController extends Controller
             "UPDATE users SET password = ?, must_change_password = 1 WHERE id = ? AND role = 'admin'",
             [password_hash($password, PASSWORD_DEFAULT), $adminId],
         );
+        (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser($adminId);
         $this->ctx->session->set('_generated_password', [
             'username' => (string) $admin['username'],
             'name' => trim((string) $admin['firstname'] . ' ' . (string) $admin['lastname']),

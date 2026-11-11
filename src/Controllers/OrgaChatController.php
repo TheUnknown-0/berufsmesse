@@ -36,6 +36,25 @@ final class OrgaChatController extends OrgaBaseController
         ]);
     }
 
+    /** GET /api/v1/{school}/chat — lesbare Räume mit Ungelesenen und Schreibrecht (App). */
+    public function apiSpaces(array $params): array
+    {
+        $access = $this->orga($params);
+        $unread = $access->unreadCounts();
+
+        return [
+            'success' => true,
+            'spaces' => array_map(static fn (array $space): array => [
+                'slug' => $space['slug'],
+                'title' => $space['title'],
+                'color' => $space['color'],
+                'unread' => (int) ($unread[$space['key']] ?? 0),
+                'can_write' => $access->canWriteSpace($space),
+            ], $access->readableSpaces()),
+            'user_id' => $access->userId(),
+        ];
+    }
+
     /**
      * GET /{school}/api/orga/chat/{space}
      *

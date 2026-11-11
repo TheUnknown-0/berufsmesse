@@ -5,6 +5,12 @@ Die Berufsmesse liest diese Datei für die Versionsnummer in der Seitenleiste, d
 Änderungsverlauf im Versionsdialog und die Update-Prüfung (siehe README, Abschnitt
 „Versionen und Updates“). Einträge kurz und für Admins verständlich halten.
 
+## 1.6.0 (2026-11-11)
+
+- Schnittstelle für die Android-App: Anmeldung, alle Funktionen passend zu Rolle und Rechten, Tagesplan, Anmeldungen, Check-in, Scanner, Orga-Chat und Benachrichtigungen.
+- Seiten, die die App öffnet, erscheinen dort ohne eigene Seitenleiste und Kopfzeile und im Hell- oder Dunkelmodus der App.
+- Sicherheit: Jede Passwortänderung (selbst oder durch Admins, auch über das Zugangsdaten-PDF) meldet das Konto auf allen Geräten der App ab.
+
 ## 1.5.0 (2026-11-06)
 
 - Versionsnummer unten in der Seitenleiste, für alle sichtbar. Admins öffnen per Klick diesen Änderungsverlauf.

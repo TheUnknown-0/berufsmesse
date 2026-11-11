@@ -66,6 +66,13 @@ final class RouteGuardsTest extends TestCase
         'GET /readyz' => 'Container-Healthcheck.',
         'GET /aussteller-einladung' => 'Einladungslink; der Token im Aufruf ist der Nachweis.',
         'POST /aussteller-einladung' => 'Einladungslink; der Token im Aufruf ist der Nachweis.',
+        'GET /api/v1/info' => 'App: Erkennung des Servers vor der Anmeldung.',
+        'GET /api/v1/schulen' => 'App: Schulauswahl vor der Anmeldung (dieselbe Liste wie GET /).',
+        'POST /api/v1/login' => 'App: Anmeldung; prüft Seitenpasswort und Rate-Limit selbst.',
+        'POST /api/v1/logout' => 'App: widerruft nur das Token der eigenen Anfrage, ohne Token passiert nichts.',
+        'GET /api/v1/ich' => 'App: verlangt ein gültiges Token (currentUser() wirft 401), auch bei Pflicht zum Passwortwechsel.',
+        'POST /api/v1/web-sitzung' => 'App: verlangt ein gültiges Token (currentUser() wirft 401); der Link öffnet nur Seiten mit eigenen Guards.',
+        'GET /app/uebergabe/{code}' => 'Einmal-Code aus der angemeldeten App ist der Nachweis (60 Sekunden, einmal gültig).',
     ];
 
     /**
@@ -82,6 +89,9 @@ final class RouteGuardsTest extends TestCase
         'GET /{school}/feedback' => 'Freischaltung und Zielgruppe prüft FeedbackService::isOpen()/isInAudience().',
         'GET /{school}/feedback/{id}' => 'Freischaltung und Zielgruppe prüft FeedbackService::isOpen()/isInAudience().',
         'POST /{school}/feedback/{id}' => 'Freischaltung und Zielgruppe prüft FeedbackService::isOpen()/isInAudience().',
+        'GET /api/v1/{school}/funktionen' => 'App: liefert nur, was Rolle und Rechte erlauben (AppNavigation, wie die Seitenleiste).',
+        'GET /api/v1/benachrichtigungen' => 'App: wie GET /api/benachrichtigungen, nur die eigenen Benachrichtigungen.',
+        'POST /api/v1/benachrichtigungen/gelesen' => 'App: wie POST /api/benachrichtigungen/gelesen, nur die eigenen Benachrichtigungen.',
     ];
 
     /** @return list<array{method: string, pattern: string, handler: array{class-string, string}}> */

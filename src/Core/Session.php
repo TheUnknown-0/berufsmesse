@@ -26,6 +26,24 @@ final class Session
         session_start();
     }
 
+    /**
+     * Sitzung nur für diese eine Anfrage, ohne Cookie und ohne Speicherung.
+     * Für die App-Schnittstelle (/api/v1/...), die sich per Bearer-Token
+     * anmeldet: Die vorhandenen Guards lesen user_id weiter aus der Sitzung.
+     */
+    public function startStateless(): void
+    {
+        $this->stateless = true;
+        $_SESSION = [];
+    }
+
+    public function isStateless(): bool
+    {
+        return $this->stateless;
+    }
+
+    private bool $stateless = false;
+
     public function get(string $key, mixed $default = null): mixed
     {
         return $_SESSION[$key] ?? $default;

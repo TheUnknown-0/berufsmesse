@@ -5,8 +5,11 @@
  * relativ zu /assets/js/), $ctx, $auth, $csrf (via View::share).
  */
 $baseUrl = $ctx->config['app']['base_url'];
+// In der Android-App (Web-Übergabe) übernimmt die App Navigation und Kopfzeile.
+$appMode = $ctx->session->get(\App\Services\ApiTokens::SESSION_APP_MODE) === true;
+$appTheme = $appMode ? $ctx->session->get(\App\Services\ApiTokens::SESSION_APP_THEME) : null;
 ?><!DOCTYPE html>
-<html lang="de" class="no-js">
+<html lang="de" class="no-js"<?= in_array($appTheme, ['light', 'dark'], true) ? ' data-app-theme="' . e($appTheme) . '"' : '' ?>>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,12 +19,16 @@ $baseUrl = $ctx->config['app']['base_url'];
     <?= $view->renderPartial('partials/theme') ?>
     <script src="<?= e($baseUrl) ?>/assets/js/theme-init.js"></script>
 </head>
-<body>
+<body<?= $appMode ? ' class="app-mode"' : '' ?>>
 <div class="app-shell">
+    <?php if (!$appMode): ?>
     <?= $view->renderPartial('partials/sidebar') ?>
     <div class="sidebar-backdrop" hidden></div>
+    <?php endif; ?>
     <div class="app-main">
+        <?php if (!$appMode): ?>
         <?= $view->renderPartial('partials/topbar', ['title' => $title ?? null]) ?>
+        <?php endif; ?>
         <main class="app-content">
             <?= $view->renderPartial('partials/flash') ?>
             <?= $view->renderPartial('partials/notifications-modal') ?>

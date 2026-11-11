@@ -78,6 +78,67 @@ final class StudentController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/v1/{school}/schueler — Tagesplan, Anmeldungen und Messe-Eckdaten
+     * für die App (dieselben Daten wie Übersicht, Tagesplan und Meine Anmeldungen).
+     */
+    public function apiPlan(array $params): array
+    {
+        $this->requireSchool($params['school']);
+        $user = $this->requireStudentAccess();
+        $edition = $this->ctx->requireEdition();
+        $userId = (int) $user['id'];
+        $editionId = (int) $edition['id'];
+
+        $time = static fn (mixed $t): ?string => is_string($t) && $t !== '' ? substr($t, 0, 5) : null;
+        $room = static fn (array $r): ?string => ($label = \App\Services\AttendanceService::roomLabel($r['room_number'] ?? null, $r['room_name'] ?? null)) !== '' ? $label : null;
+
+        $timeline = array_map(static function (array $slot) use ($time, $room): array {
+            $reg = $slot['registration'];
+            $held = $slot['held'];
+
+            return [
+                'slot_number' => (int) $slot['slot_number'],
+                'slot_name' => (string) ($slot['slot_name'] ?: ('Slot ' . $slot['slot_number'])),
+                'start' => $time($slot['start_time']),
+                'end' => $time($slot['end_time']),
+                'kind' => $slot['kind'],
+                'exhibitor' => $reg !== null ? (string) $reg['exhibitor_name'] : null,
+                'description' => $reg !== null ? $reg['short_description'] : null,
+                'room' => $reg !== null ? $room($reg) : null,
+                'building' => $reg !== null ? $reg['building'] : null,
+                'held_exhibitor' => $held !== null ? (string) ($held['exhibitor_name'] ?? '') : null,
+            ];
+        }, $this->timeline($userId, $editionId));
+
+        $registrations = array_map(static fn (array $r): array => [
+            'id' => (int) $r['id'],
+            'exhibitor' => (string) $r['exhibitor_name'],
+            'description' => $r['short_description'],
+            'priority' => $r['priority'] !== null ? (int) $r['priority'] : null,
+            'type' => (string) $r['registration_type'],
+            'slot' => $r['timeslot_id'] !== null ? (string) ($r['slot_name'] ?: ('Slot ' . $r['slot_number'])) : null,
+            'start' => $time($r['start_time']),
+            'end' => $time($r['end_time']),
+            'room' => $room($r),
+        ], (new RegistrationController($this->ctx))->ownRegistrations($userId, $editionId));
+
+        return [
+            'success' => true,
+            'edition' => [
+                'name' => (string) $edition['name'],
+                'event_date' => $edition['event_date'] ?? null,
+                'days_until' => self::daysUntil($edition['event_date'] ?? null),
+                'registration_open' => RegistrationController::isRegistrationOpen($edition),
+                'registration_end' => $edition['registration_end'] ?? null,
+                'max_registrations' => RegistrationController::maxRegistrations($edition),
+            ],
+            'timeline' => $timeline,
+            'registrations' => $registrations,
+            'checkin_enabled' => $this->ctx->settings->getBool('checkin_self_scan_enabled', $this->ctx->schoolId(), true),
+        ];
+    }
+
     /** GET /{school}/drucken */
     public function print(array $params): string
     {

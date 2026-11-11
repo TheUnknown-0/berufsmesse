@@ -45,7 +45,8 @@ try {
     // ---------- Globales Seitenpasswort (optional) ----------
     // /healthz und /readyz müssen auch bei aktivem Seitenpasswort antworten —
     // sonst meldet der Container-Healthcheck eine Weiterleitung statt Zustand.
-    $exemptPrefixes = ['/zugang', '/assets/', '/favicon', '/healthz', '/readyz'];
+    // /app/uebergabe/ prüft selbst (Einmal-Code aus der angemeldeten App, siehe AppHandoffController).
+    $exemptPrefixes = ['/zugang', '/assets/', '/favicon', '/healthz', '/readyz', '/app/uebergabe/'];
     $exempt = false;
     foreach ($exemptPrefixes as $prefix) {
         if (str_starts_with($path, $prefix)) {

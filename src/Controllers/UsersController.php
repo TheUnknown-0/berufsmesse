@@ -437,6 +437,7 @@ final class UsersController extends Controller
                 'UPDATE users SET password = NULL, must_change_password = 1 WHERE id = ? AND school_id = ?',
                 [$userId, $schoolId],
             );
+            (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser($userId);
             $this->ctx->audit->log(
                 'Passwort geleert',
                 'warning',
@@ -452,6 +453,7 @@ final class UsersController extends Controller
             'UPDATE users SET password = ?, must_change_password = 1 WHERE id = ? AND school_id = ?',
             [password_hash($password, PASSWORD_DEFAULT), $userId, $schoolId],
         );
+        (new \App\Services\ApiTokens($this->ctx->db))->revokeAllForUser($userId);
         // Klartext nur für die einmalige Anzeige nach dem Redirect.
         $this->ctx->session->set('_generated_password', [
             'username' => (string) $user['username'],

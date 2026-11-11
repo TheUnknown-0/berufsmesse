@@ -52,10 +52,19 @@ $db = new Database(
 );
 
 $session = new Session();
-$session->start((bool) $config['app']['secure_cookies']);
+// Die App-Schnittstelle arbeitet ohne Cookie-Sitzung: Anmeldung per Bearer-Token.
+$appApi = \App\Services\AppApi::isAppApiRequest($config);
+if ($appApi) {
+    $session->startStateless();
+} else {
+    $session->start((bool) $config['app']['secure_cookies']);
+}
 
 $csrf = new Csrf($session);
 $auth = new Auth($session, $db);
+if ($appApi) {
+    \App\Services\AppApi::authenticate($session, $db);
+}
 $view = new View(dirname(__DIR__) . '/templates');
 $settings = new Settings($db);
 $audit = new Audit($db, $auth);
