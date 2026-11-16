@@ -31,6 +31,7 @@ $appTheme = $appMode ? $ctx->session->get(\App\Services\ApiTokens::SESSION_APP_T
         <?php endif; ?>
         <main class="app-content">
             <?= $view->renderPartial('partials/flash') ?>
+            <?= $view->renderPartial('partials/help-call-bar') ?>
             <?= $view->renderPartial('partials/notifications-modal') ?>
             <?= $content ?>
         </main>

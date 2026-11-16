@@ -115,6 +115,7 @@ final class AppNavigation
                 'anwesenheit' => [$s('/admin/anwesenheit'), '✅', 'Anwesenheit', $can(P::ANWESENHEIT_SEHEN)],
                 'leitstand' => [$s('/admin/leitstand'), '🛰️', 'Leitstand', $can(P::ANWESENHEIT_SEHEN)],
                 'aufsicht' => [$s('/admin/aufsicht'), '🦺', 'Aufsichtsplan', $can(P::AUFSICHTSPLAN_SEHEN)],
+                'hilfe' => [$s('/hilfe'), '🆘', 'Hilfe-Ruf', $can(P::HILFE_RUFEN) || $can(P::HILFE_RUFE_EMPFANGEN) || $can(P::HILFE_RUFE_VERWALTEN)],
                 'druckzentrale' => [$s('/admin/druckzentrale'), '🖨️', 'Druckzentrale', $can(P::BERICHTE_SEHEN)],
                 'jahresvergleich' => [$s('/admin/jahresvergleich'), '📈', 'Jahresvergleich', $can(P::BERICHTE_SEHEN)],
                 'editionen' => [$s('/admin/editionen'), '🗂️', 'Editionen', $can(P::EDITIONEN_SEHEN)],

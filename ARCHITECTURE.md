@@ -201,6 +201,26 @@ Für die Android-App (eigenes Repo `berufsmesse-app`). Routen in `src/routes/02-
 - **Funktionsliste** (`Services\AppNavigation`) spiegelt `templates/partials/sidebar.php`. Neue Menüpunkte dort UND hier eintragen.
 - **Web-Übergabe:** `POST /api/v1/web-sitzung` liefert einen Einmal-Link `/app/uebergabe/{code}` (60 s, einmal). Er startet die Cookie-Sitzung der WebView im **App-Modus**: Layout ohne Seitenleiste und Kopfzeile, Theme der App (`data-app-theme`). Ändert das Konto dort sein Passwort, bleibt genau dieses App-Gerät angemeldet.
 
+### Hilfe-Ruf (`/api/v1/{school}/hilfe…`)
+
+Fachlogik in `Services\HelpCalls`, Aktionen in `Controllers\HelpCallController`, Tabellen `help_calls`, `help_call_responses`, `help_call_duty` (Migration 012). Dieselben Aktionen laufen im Web unter `/{school}/api/hilfe…` (Cookie + CSRF). Jede Aktion antwortet mit dem vollständigen Zustand wie `GET …/hilfe`.
+
+| Methode und Pfad | Recht | Zweck |
+|---|---|---|
+| `GET /api/v1/{school}/hilfe[?dienst=1]` | eines der drei | Zustand: Räume, Kategorien, offene Rufe, Zahl im Dienst. `dienst=1` meldet das Gerät „Im Dienst“ (App, alle 5 s). |
+| `POST …/hilfe/rufen` `{room_id, category, message?}` | `hilfe_rufen` | Ruf aus einem zugeteilten Raum, nur am Messetag (`event_date` der aktiven Edition = heute). |
+| `POST …/hilfe/probealarm` `{message?}` | `hilfe_rufe_verwalten` | Probealarm ohne Raum, jeden Tag möglich, höchstens einer offen. |
+| `POST …/hilfe/dienst` `{on}` | `hilfe_rufe_empfangen` | „Im Dienst“ an/aus (nur App). |
+| `POST …/hilfe/{id}/kommen` | `hilfe_rufe_empfangen` | „Ich komme“ / „Ich komme auch“, nicht beim eigenen Ruf. |
+| `POST …/hilfe/{id}/mehr` | Rufender oder demselben Raum zugeteilt | „Brauche mehr Hilfe“: neue Klingel-Runde. |
+| `POST …/hilfe/{id}/schliessen` | wie `mehr` oder `hilfe_rufe_verwalten` | Ruf schließen. |
+
+Regeln, auf die sich die App verlässt:
+- **Räume** kommen aus dem Aufsichtsplan (`teacher_room_assignments`, Lehrkräfte und Orga); `preselected` ist der Raum des laufenden bzw. nächsten Slots, sonst der Ganztags-Raum. Höchstens ein offener Ruf pro Raum (UNIQUE auf der berechneten Spalte `open_room_key`, deshalb ohne Fremdschlüssel auf `room_id`; `room_label` hält den Namen fest).
+- **Klingeln:** Jeder Ruf hat `round`. Die App klingelt, wenn `round` höher ist als die zuletzt geklingelte Runde, `answered_since_alert` falsch ist und `i_am_caller` falsch ist. `answered_since_alert` wird wahr, sobald nach Beginn der Runde jemand zusagt: dann hört das Klingeln überall auf. Neue Runden: neuer Ruf (`reason=new`), „mehr Hilfe“ (`more`), ohne jede Zusage alle `unanswered_seconds` (120 s, `unanswered`; wird beim Lesen berechnet, beim nächsten Schreiben festgehalten). `nobody_coming` zeigt dem Rufenden „Noch niemand unterwegs“.
+- **Dienst-Ende:** `duty_until` (Ende des heutigen Tages, am Messetag also Ende des Messetags); danach schaltet sich der Dienst in der App selbst ab. Als „im Dienst“ zählt, wer sich in den letzten 30 s gemeldet hat.
+- Alles bezieht sich auf die **aktive** Edition, unabhängig von einer Archivansicht.
+
 ## Seiten-Blöcke (Anordnen-Modus)
 
 Jede inhaltliche Seite deklariert ihre Abschnitte als **Blöcke**, damit Schul-Admins sie pro Schule per Drag & Drop anordnen und ausblenden können (Button „🧩 Anordnen" in der Topbar, Modus `?anordnen=1`). Kern: `src/Core/PageBlocks.php`; Speicherung als Setting `page_layout:{pageKey}` je Schule.

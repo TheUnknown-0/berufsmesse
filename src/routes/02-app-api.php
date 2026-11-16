@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controllers\Api\V1Controller;
 use App\Controllers\AppHandoffController;
 use App\Controllers\CheckinController;
+use App\Controllers\HelpCallController;
 use App\Controllers\NotificationsController;
 use App\Controllers\OrgaChatController;
 use App\Controllers\StudentController;
@@ -36,6 +37,13 @@ return static function (Router $r): void {
     $r->get('/api/v1/{school}/chat', [OrgaChatController::class, 'apiSpaces']);
     $r->get('/api/v1/{school}/chat/{space}', [OrgaChatController::class, 'apiMessages']);
     $r->post('/api/v1/{school}/chat/{space}/senden', [OrgaChatController::class, 'apiSend']);
+    $r->get('/api/v1/{school}/hilfe', [HelpCallController::class, 'status']);
+    $r->post('/api/v1/{school}/hilfe/rufen', [HelpCallController::class, 'call']);
+    $r->post('/api/v1/{school}/hilfe/probealarm', [HelpCallController::class, 'test']);
+    $r->post('/api/v1/{school}/hilfe/dienst', [HelpCallController::class, 'duty']);
+    $r->post('/api/v1/{school}/hilfe/{id}/kommen', [HelpCallController::class, 'respond']);
+    $r->post('/api/v1/{school}/hilfe/{id}/mehr', [HelpCallController::class, 'more']);
+    $r->post('/api/v1/{school}/hilfe/{id}/schliessen', [HelpCallController::class, 'close']);
 
     // Kein /api/-Pfad: Hier entsteht die normale Cookie-Sitzung der WebView.
     $r->get('/app/uebergabe/{code}', [AppHandoffController::class, 'enter']);

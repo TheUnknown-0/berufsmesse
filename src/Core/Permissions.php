@@ -93,6 +93,12 @@ final class Permissions
     public const AUFSICHTSPLAN_SEHEN = 'aufsichtsplan_sehen';
     public const AUFSICHTSPLAN_VERWALTEN = 'aufsichtsplan_verwalten';
 
+    // Hilfe-Ruf am Messetag. Rufen geht nur aus Räumen, denen man im
+    // Aufsichtsplan zugeteilt ist; Empfangen läuft über die App („Im Dienst“).
+    public const HILFE_RUFEN = 'hilfe_rufen';
+    public const HILFE_RUFE_EMPFANGEN = 'hilfe_rufe_empfangen';
+    public const HILFE_RUFE_VERWALTEN = 'hilfe_rufe_verwalten';
+
     // Ausstattung
     public const AUSSTATTUNG_SEHEN = 'ausstattung_sehen';
     public const AUSSTATTUNG_VERWALTEN = 'ausstattung_verwalten';
@@ -185,6 +191,11 @@ final class Permissions
             'Aufsichtsplan' => [
                 self::AUFSICHTSPLAN_SEHEN => 'Aufsichtsplan sehen',
                 self::AUFSICHTSPLAN_VERWALTEN => 'Aufsichtsplan verwalten',
+            ],
+            'Hilfe-Ruf' => [
+                self::HILFE_RUFEN => 'Hilfe rufen (nur aus Räumen, denen man zugeteilt ist)',
+                self::HILFE_RUFE_EMPFANGEN => 'Hilfe-Rufe empfangen (App: „Im Dienst“) und zusagen',
+                self::HILFE_RUFE_VERWALTEN => 'Hilfe-Ruf verwalten (Kategorien, Probealarm, Verlauf aller Rufe)',
             ],
             'Ausstattung' => [
                 self::AUSSTATTUNG_SEHEN => 'Ausstattungsanfragen sehen',
@@ -280,6 +291,9 @@ final class Permissions
             self::ANWESENHEIT_BEARBEITEN => [self::ANWESENHEIT_SEHEN],
 
             self::AUFSICHTSPLAN_VERWALTEN => [self::AUFSICHTSPLAN_SEHEN],
+
+            // Wer Rufe verwaltet, sieht auch die offenen Rufe (Banner, Probealarm prüfen).
+            self::HILFE_RUFE_VERWALTEN => [self::HILFE_RUFE_EMPFANGEN],
 
             self::AUSSTATTUNG_VERWALTEN => [self::AUSSTATTUNG_SEHEN],
 

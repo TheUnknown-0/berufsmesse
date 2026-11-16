@@ -8,12 +8,19 @@ use App\Core\Permissions;
 use App\Services\AttendanceService;
 
 /**
- * Aufsichtsplan: Lehrkraft je Raum und Zeitslot.
+ * Aufsichtsplan: Lehrkräfte und Orga-Mitglieder je Raum und Zeitslot.
  * Die Spalte „Ganztags“ entspricht einer Zuweisung mit timeslot_id = NULL
  * und gilt für alle Slots (auch die freien).
+ *
+ * Die Einteilung entscheidet auch, aus welchen Räumen jemand am Messetag
+ * Hilfe rufen darf (Services\HelpCalls). Die Spalte teacher_id heißt aus
+ * historischen Gründen so und nimmt beide Rollen auf.
  */
 final class SupervisionController extends Controller
 {
+    /** Rollen, die Räumen zugeteilt werden können. */
+    private const ROLES_SQL = '\'teacher\', \'orga\'';
+
     /** GET /{school}/admin/aufsicht */
     public function index(array $params): string
     {
@@ -38,15 +45,15 @@ final class SupervisionController extends Controller
         );
 
         $teachers = $this->ctx->db->fetchAll(
-            'SELECT id, firstname, lastname FROM users
-             WHERE school_id = ? AND role = \'teacher\'
+            'SELECT id, firstname, lastname, role FROM users
+             WHERE school_id = ? AND role IN (' . self::ROLES_SQL . ')
              ORDER BY lastname, firstname',
             [$schoolId],
         );
 
         $assignmentRows = $this->ctx->db->fetchAll(
             'SELECT tra.id, tra.teacher_id, tra.room_id, tra.timeslot_id,
-                    u.firstname, u.lastname
+                    u.firstname, u.lastname, u.role
              FROM teacher_room_assignments tra
              JOIN users u ON u.id = tra.teacher_id
              WHERE tra.edition_id = ?',
@@ -129,7 +136,7 @@ final class SupervisionController extends Controller
         $timeslotId = ($rawSlot === '' || $rawSlot === 'ganztags') ? null : (int) $rawSlot;
 
         $teacher = $this->ctx->db->fetchOne(
-            'SELECT id, firstname, lastname FROM users WHERE id = ? AND school_id = ? AND role = \'teacher\'',
+            'SELECT id, firstname, lastname FROM users WHERE id = ? AND school_id = ? AND role IN (' . self::ROLES_SQL . ')',
             [$teacherId, $schoolId],
         );
         $roomOk = $this->ctx->db->fetchValue(
@@ -137,7 +144,7 @@ final class SupervisionController extends Controller
             [$roomId, $editionId],
         );
         if ($teacher === null || $roomOk === null) {
-            $this->flash('error', 'Lehrkraft oder Raum gehört nicht zu dieser Schule bzw. Messe.');
+            $this->flash('error', 'Person oder Raum gehört nicht zu dieser Schule bzw. Messe.');
             $this->redirect($target);
         }
         if ($timeslotId !== null) {

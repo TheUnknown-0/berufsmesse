@@ -7,11 +7,20 @@ $formAction = $ctx->schoolUrl('/admin/aufsicht');
 
 /** Rendert das Auswahl-Formular einer Zelle. */
 $assignForm = static function (int $roomId, string $slotValue) use ($teachers, $csrf, $formAction): string {
-    $options = '<option value="">+ Lehrkraft …</option>';
-    foreach ($teachers as $teacher) {
-        $options .= '<option value="' . e((string) (int) $teacher['id']) . '">'
-            . e(trim((string) $teacher['lastname'] . ', ' . (string) $teacher['firstname']))
-            . '</option>';
+    $options = '<option value="">+ Person …</option>';
+    foreach (['teacher' => 'Lehrkräfte', 'orga' => 'Orga-Team'] as $role => $groupLabel) {
+        $group = '';
+        foreach ($teachers as $teacher) {
+            if (($teacher['role'] ?? 'teacher') !== $role) {
+                continue;
+            }
+            $group .= '<option value="' . e((string) (int) $teacher['id']) . '">'
+                . e(trim((string) $teacher['lastname'] . ', ' . (string) $teacher['firstname']))
+                . '</option>';
+        }
+        if ($group !== '') {
+            $options .= '<optgroup label="' . e($groupLabel) . '">' . $group . '</optgroup>';
+        }
     }
 
     return '<form method="post" action="' . e($formAction) . '" class="cluster" style="gap:4px;margin-top:6px;">'
@@ -29,7 +38,9 @@ $assignedChips = static function (array $entries) use ($canEdit, $csrf, $formAct
     $html = '<div class="chip-row">';
     foreach ($entries as $entry) {
         $name = trim((string) $entry['firstname'] . ' ' . (string) $entry['lastname']);
-        $html .= '<span class="badge badge-primary">' . e($name);
+        $isOrga = ($entry['role'] ?? '') === 'orga';
+        $html .= '<span class="badge ' . ($isOrga ? 'badge-info' : 'badge-primary') . '"'
+            . ($isOrga ? ' title="Orga-Team"' : '') . '>' . e($name) . ($isOrga ? ' (Orga)' : '');
         if ($canEdit) {
             $html .= '<form method="post" action="' . e($formAction) . '" style="display:inline;"'
                 . ' data-confirm="Aufsicht von ' . e($name) . ' entfernen?">'
@@ -50,7 +61,8 @@ $assignedChips = static function (array $entries) use ($canEdit, $csrf, $formAct
         <div class="page-eyebrow">Messetag</div>
         <h1 class="page-title">Aufsichtsplan</h1>
         <p class="page-sub">
-            Lehrkräfte je Raum und Zeitslot — Grundlage für den Lehrer-Check-in.
+            Lehrkräfte und Orga-Mitglieder je Raum und Zeitslot. Grundlage für den
+            Lehrer-Check-in und dafür, aus welchem Raum jemand am Messetag Hilfe rufen kann.
             „Ganztags“ gilt für alle Slots, auch für die frei wählbaren.
         </p>
     </div>
@@ -71,7 +83,7 @@ $assignedChips = static function (array $entries) use ($canEdit, $csrf, $formAct
 <?php elseif ($teachers === [] && $canEdit): ?>
     <div class="alert alert-info">
         <span>ℹ️</span>
-        <div>Es sind noch keine Benutzer mit der Rolle „Lehrer“ angelegt.</div>
+        <div>Es sind noch keine Benutzer mit der Rolle „Lehrer“ oder „Orga“ angelegt.</div>
     </div>
 <?php endif; ?>
 

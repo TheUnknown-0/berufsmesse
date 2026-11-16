@@ -5,6 +5,13 @@ Die Berufsmesse liest diese Datei für die Versionsnummer in der Seitenleiste, d
 Änderungsverlauf im Versionsdialog und die Update-Prüfung (siehe README, Abschnitt
 „Versionen und Updates“). Einträge kurz und für Admins verständlich halten.
 
+## 1.7.0 (2026-11-16)
+
+- Hilfe-Ruf am Messetag: Wer im Aufsichtsplan einem Raum zugeteilt ist, ruft per Knopf Hilfe (Kategorie, optional kurzer Text). Der Rufende sieht, wer unterwegs ist, kann mehr Hilfe anfordern und den Ruf schließen.
+- Empfang in der App mit dem Schalter „Im Dienst“: Rufe kommen mit Ton und Vibration aufs Handy, „Ich komme“ direkt aus der Benachrichtigung. Sagt nach 2 Minuten niemand zu, klingelt es erneut. Im Browser erscheinen offene Rufe als Banner.
+- Neue Rechte „Hilfe rufen“, „Hilfe-Rufe empfangen“ und „Hilfe-Ruf verwalten“ (Kategorien, Textfeld, Probealarm, Verlauf).
+- Aufsichtsplan: Neben Lehrkräften lassen sich jetzt auch Orga-Mitglieder Räumen zuteilen.
+
 ## 1.6.0 (2026-11-11)
 
 - Schnittstelle für die Android-App: Anmeldung, alle Funktionen passend zu Rolle und Rechten, Tagesplan, Anmeldungen, Check-in, Scanner, Orga-Chat und Benachrichtigungen.
