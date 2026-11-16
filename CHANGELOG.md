@@ -5,6 +5,10 @@ Die Berufsmesse liest diese Datei für die Versionsnummer in der Seitenleiste, d
 Änderungsverlauf im Versionsdialog und die Update-Prüfung (siehe README, Abschnitt
 „Versionen und Updates“). Einträge kurz und für Admins verständlich halten.
 
+## 1.7.1 (2026-11-16)
+
+- Fehlerbehebung: Die App meldete für Admins, Orga und Lehrkräfte beim Laden der Funktionen einen Serverfehler (500).
+
 ## 1.7.0 (2026-11-16)
 
 - Hilfe-Ruf am Messetag: Wer im Aufsichtsplan einem Raum zugeteilt ist, ruft per Knopf Hilfe (Kategorie, optional kurzer Text). Der Rufende sieht, wer unterwegs ist, kann mehr Hilfe anfordern und den Ruf schließen.

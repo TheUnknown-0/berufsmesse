@@ -118,7 +118,10 @@ final class AppNavigation
                 'hilfe' => [$s('/hilfe'), '🆘', 'Hilfe-Ruf', $can(P::HILFE_RUFEN) || $can(P::HILFE_RUFE_EMPFANGEN) || $can(P::HILFE_RUFE_VERWALTEN)],
                 'druckzentrale' => [$s('/admin/druckzentrale'), '🖨️', 'Druckzentrale', $can(P::BERICHTE_SEHEN)],
                 'jahresvergleich' => [$s('/admin/jahresvergleich'), '📈', 'Jahresvergleich', $can(P::BERICHTE_SEHEN)],
-                'editionen' => [$s('/admin/editionen'), '🗂️', 'Editionen', $can(P::EDITIONEN_SEHEN)],
+                // Das Recht kommt erst mit der Editionen-Archivansicht. Bis dahin
+                // fehlt die Konstante, und ein direkter Zugriff wäre ein Fatal Error.
+                'editionen' => [$s('/admin/editionen'), '🗂️', 'Editionen',
+                    defined(P::class . '::EDITIONEN_SEHEN') && $can(constant(P::class . '::EDITIONEN_SEHEN'))],
                 'ausstattung' => [$s('/admin/ausstattung'), '🔌', 'Ausstattung', $can(P::AUSSTATTUNG_SEHEN)],
                 'feedback' => [$s('/admin/feedback'), '💬', 'Feedback', $can(P::FEEDBACK_SEHEN)],
                 'ankuendigungen' => [$s('/admin/ankuendigungen'), '📣', 'Ankündigungen', $can(P::ANKUENDIGUNGEN_VERWALTEN)],
