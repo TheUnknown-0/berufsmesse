@@ -45,6 +45,17 @@ final class SecurityCheck
     /** Gleichzeitige Verbindungen beim parallelen Abruf. */
     private const PARALLEL = 16;
 
+    /**
+     * Quellpakete, deren Lücken den Container nicht betreffen. "linux" kommt
+     * nur als linux-libc-dev (Kernel-Header, Abhängigkeit von libc6-dev) ins
+     * Image; ein Container hat keinen eigenen Kernel, er nutzt den des Hosts.
+     * Ohne diesen Ausschluss bestünde die Fundliste fast nur aus Kernel-CVEs
+     * für fremde Architekturen und Treiber.
+     */
+    private const IGNORED_SOURCE_PACKAGES = [
+        'linux' => 'nur Kernel-Header aus linux-libc-dev, der Container nutzt den Kernel des Hosts',
+    ];
+
     private const GITHUB_ADVISORIES = 'https://api.github.com/repos/php/php-src/security-advisories?per_page=50&sort=published&direction=desc';
     private const PHP_RELEASES = 'https://www.php.net/releases/index.php?json&version=';
     private const OSV_BATCH = 'https://api.osv.dev/v1/querybatch';
@@ -205,6 +216,13 @@ final class SecurityCheck
         }
         $ecosystem = 'Debian:' . $os['VERSION_ID'];
         $packages = self::parseDpkgStatus((string) file_get_contents($this->dpkgStatusFile));
+        $ignored = [];
+        foreach (self::IGNORED_SOURCE_PACKAGES as $name => $reason) {
+            if (isset($packages[$name])) {
+                $ignored[] = sprintf('Systempakete: %s nicht geprüft (%s).', $name, $reason);
+                unset($packages[$name]);
+            }
+        }
 
         // Alle Pakete in einer Abfrage: OSV liefert je Paket die Kennungen der
         // Lücken, die genau diese Version betreffen.
@@ -275,9 +293,9 @@ final class SecurityCheck
         }
         $this->saveCache($cache);
 
-        $notes = [sprintf('Systempakete: %d Quellpakete (%s) geprüft.', count($packages), $ecosystem)];
+        $notes = [sprintf('Systempakete: %d Quellpakete (%s) geprüft.', count($packages), $ecosystem), ...$ignored];
         if ($minorFixes > 0) {
-            $notes[] = sprintf('Systempakete: %d weitere behobene Lücken mit niedriger oder fehlender Bewertung. Ein Neubau des Containers holt die Fixes.', $minorFixes);
+            $notes[] = sprintf('Systempakete: %d weitere behobene Lücken mit niedriger oder fehlender Bewertung. Ein Neubau des Containers (docker compose up -d --build) holt die Fixes.', $minorFixes);
         }
         if ($pending > 0) {
             $notes[] = sprintf('Systempakete: %d Einträge noch nicht ausgewertet, folgen beim nächsten Lauf.', $pending);

@@ -5,6 +5,11 @@ Die Berufsmesse liest diese Datei für die Versionsnummer in der Seitenleiste, d
 Änderungsverlauf im Versionsdialog und die Update-Prüfung (siehe README, Abschnitt
 „Versionen und Updates“). Einträge kurz und für Admins verständlich halten.
 
+## 1.7.2 (2026-11-18)
+
+- Sicherheit: Ein Neubau des Containers spielt jetzt die Debian-Sicherheitsupdates ein (u. a. Apache 2.4.71 gegen eine Lücke in mod_http2). Bisher blieben die Systempakete auf dem Stand des Basis-Images.
+- Sicherheitscheck: Kernel-Lücken werden nicht mehr gemeldet, da der Container den Kernel des Hosts nutzt. Sie machten den Großteil der „hohen“ Funde aus.
+
 ## 1.7.1 (2026-11-16)
 
 - Fehlerbehebung: Die App meldete für Admins, Orga und Lehrkräfte beim Laden der Funktionen einen Serverfehler (500).

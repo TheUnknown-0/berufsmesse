@@ -19,6 +19,21 @@ RUN apt-get update \
     && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 
+# Debian-Sicherheitsupdates einspielen. Das Basis-Image bringt die Pakete nur
+# in dem Stand mit, in dem Docker Hub es zuletzt gebaut hat; ohne Upgrade
+# bleiben behobene Lücken (etwa in Apache) trotz Neubau bestehen.
+# Die ADD-Zeilen holen bei jedem Build die Release-Dateien der Debian-Archive.
+# Ändern sie sich (neues Sicherheitsupdate oder Point-Release), verwirft Docker
+# den Cache ab hier und führt das Upgrade erneut aus, sonst bleibt der Build
+# schnell. Bei einem Wechsel des Basis-Images auf ein neues Debian den
+# Codenamen anpassen (cat /etc/os-release im Container).
+ARG DEBIAN_CODENAME=trixie
+ADD https://security.debian.org/debian-security/dists/${DEBIAN_CODENAME}-security/InRelease /tmp/apt-release/security
+ADD https://deb.debian.org/debian/dists/${DEBIAN_CODENAME}/InRelease /tmp/apt-release/main
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* /tmp/apt-release
+
 # DocumentRoot auf public/ setzen (Front-Controller-Pattern)
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' \

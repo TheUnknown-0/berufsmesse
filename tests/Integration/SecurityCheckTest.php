@@ -131,6 +131,29 @@ final class SecurityCheckTest extends DatabaseTestCase
         self::assertSame([], array_filter($this->requested, static fn (string $u): bool => str_contains($u, '/v1/vulns/')));
     }
 
+    /** Kernel-Header betreffen den Container nicht: "linux" geht gar nicht erst an OSV. */
+    public function testKernelPaketWirdNichtGeprueft(): void
+    {
+        file_put_contents(
+            $this->dir . '/status',
+            "Package: libssl3t64\nStatus: install ok installed\nSource: openssl\nVersion: 3.5.0-1\n\n"
+            . "Package: linux-libc-dev\nStatus: install ok installed\nSource: linux\nVersion: 6.12.115-2\n",
+        );
+        $batchBody = null;
+        $state = $this->check(function (string $url, ?string $body) use (&$batchBody): string {
+            if (str_contains($url, 'querybatch')) {
+                $batchBody = $body;
+            }
+
+            return $this->stub($url, $body);
+        })->run();
+
+        $names = array_column(array_column(json_decode((string) $batchBody, true)['queries'], 'package'), 'name');
+        self::assertSame(['openssl'], $names);
+        self::assertSame('openssl 3.5.0-1', $state['findings'][1]['component']);
+        self::assertNotEmpty(array_filter($state['notes'], static fn (string $n): bool => str_contains($n, 'linux nicht geprüft')));
+    }
+
     /** Ohne Netz kein „alles in Ordnung“: Die Fehler stehen im Ergebnis. */
     public function testNetzfehlerWerdenFestgehalten(): void
     {
